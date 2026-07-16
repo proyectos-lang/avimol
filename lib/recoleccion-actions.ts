@@ -219,12 +219,19 @@ export interface RecoleccionDia {
   galpon_codigo: string
   galpon_nombre: string
   total_recolectado: number
+  averia_picado: number
+  averia_roto: number
+  averia_partido: number
+  total_averias: number
 }
 
 // Agregado histórico por día y galpón — se calcula desde el kardex
 // (entrada_cosecha), NUNCA desde el saldo actual de
 // inventario_huevo_sin_clasificar, porque ese saldo baja a medida que se
 // clasifica: lo recolectado ese día es un hecho fijo, no un saldo vivo.
+// Las averías se agregan por la misma llave (fecha de cosecha + galpón,
+// vía lote_huevo_id) para que el detalle por tipo y el total queden en la
+// misma fila que lo recolectado ese día en ese galpón.
 export async function listarRecoleccionPorDia(): Promise<RecoleccionDia[]> {
   const db = getAvimolDb()
   const { data, error } = await db
@@ -254,8 +261,49 @@ export async function listarRecoleccionPorDia(): Promise<RecoleccionDia[]> {
         galpon_codigo: galpon.codigo,
         galpon_nombre: galpon.nombre,
         total_recolectado: fila.cantidad,
+        averia_picado: 0,
+        averia_roto: 0,
+        averia_partido: 0,
+        total_averias: 0,
       })
     }
+  }
+
+  const { data: averias, error: errorAverias } = await db
+    .from("averias_huevo")
+    .select("tipo_averia, cantidad, lotes_huevo(fecha_cosecha, galpones(id, codigo, nombre))")
+    .eq("etapa", "recoleccion")
+
+  if (errorAverias) {
+    console.error("[avimol] Error listando averías de recolección:", errorAverias)
+  }
+
+  for (const fila of (averias ?? []) as any[]) {
+    const fecha = fila.lotes_huevo?.fecha_cosecha ?? ""
+    const galpon = fila.lotes_huevo?.galpones
+    if (!galpon) continue
+
+    const clave = `${fecha}__${galpon.id}`
+    let grupo = grupos.get(clave)
+    if (!grupo) {
+      grupo = {
+        fecha_cosecha: fecha,
+        galpon_id: galpon.id,
+        galpon_codigo: galpon.codigo,
+        galpon_nombre: galpon.nombre,
+        total_recolectado: 0,
+        averia_picado: 0,
+        averia_roto: 0,
+        averia_partido: 0,
+        total_averias: 0,
+      }
+      grupos.set(clave, grupo)
+    }
+
+    if (fila.tipo_averia === "picado") grupo.averia_picado += fila.cantidad
+    else if (fila.tipo_averia === "roto") grupo.averia_roto += fila.cantidad
+    else if (fila.tipo_averia === "partido") grupo.averia_partido += fila.cantidad
+    grupo.total_averias += fila.cantidad
   }
 
   return Array.from(grupos.values()).sort((a, b) => b.fecha_cosecha.localeCompare(a.fecha_cosecha))

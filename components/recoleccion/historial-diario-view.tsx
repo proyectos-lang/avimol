@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { CalendarDays, Egg, RefreshCw } from "lucide-react"
+import { CalendarDays, Egg, RefreshCw, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -34,6 +34,7 @@ export function HistorialDiarioView() {
   }, [filas, busqueda])
 
   const totalRecolectado = filtradas.reduce((acc, f) => acc + f.total_recolectado, 0)
+  const totalAverias = filtradas.reduce((acc, f) => acc + f.total_averias, 0)
   const diasDistintos = new Set(filtradas.map((f) => f.fecha_cosecha)).size
 
   return (
@@ -43,6 +44,7 @@ export function HistorialDiarioView() {
         subtitulo="Total recolectado por día y galpón — cifra histórica del kardex, no cambia aunque el huevo ya esté clasificado"
       >
         <StatChip icono={Egg} label="Total recolectado" valor={totalRecolectado.toLocaleString("es-CO")} />
+        <StatChip icono={TriangleAlert} label="Total averías" valor={totalAverias.toLocaleString("es-CO")} />
         <StatChip icono={CalendarDays} label="Días" valor={diasDistintos} />
         <SearchInput value={busqueda} onChange={setBusqueda} placeholder="Buscar por galpón..." className="w-64" />
         <Button variant="outline" size="icon" onClick={cargarDatos} title="Actualizar">
@@ -74,6 +76,10 @@ export function HistorialDiarioView() {
                 <TableHead>Fecha</TableHead>
                 <TableHead>Galpón</TableHead>
                 <TableHead className="text-right">Total recolectado</TableHead>
+                <TableHead className="text-right">Picados</TableHead>
+                <TableHead className="text-right">Rotos</TableHead>
+                <TableHead className="text-right">Partidos</TableHead>
+                <TableHead className="text-right">Total averías</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -85,6 +91,18 @@ export function HistorialDiarioView() {
                   </TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
                     {f.total_recolectado.toLocaleString("es-CO")}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    {f.averia_picado > 0 ? f.averia_picado.toLocaleString("es-CO") : "—"}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    {f.averia_roto > 0 ? f.averia_roto.toLocaleString("es-CO") : "—"}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    {f.averia_partido > 0 ? f.averia_partido.toLocaleString("es-CO") : "—"}
+                  </TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">
+                    {f.total_averias > 0 ? f.total_averias.toLocaleString("es-CO") : "—"}
                   </TableCell>
                 </TableRow>
               ))}
