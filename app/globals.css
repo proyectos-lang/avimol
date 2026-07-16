@@ -1,0 +1,168 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Tema de marca LiPGO — confirmado contra el app/globals.css real y
+     autoritativo en C:\Users\Personal\Documents\lipgo\app\globals.css
+     (el que Next.js realmente importa). */
+  --background: #F4F7FC;
+  --foreground: #343a40;
+  --card: #ffffff;
+  --card-foreground: #343a40;
+  --popover: #ffffff;
+  --popover-foreground: #343a40;
+  --primary: #5bc0de;
+  --primary-foreground: #ffffff;
+  --secondary: #6c757d;
+  --secondary-foreground: #ffffff;
+  --muted: #e9ecef;
+  --muted-foreground: #6c757d;
+  --accent: #5bc0de;
+  --accent-foreground: #ffffff;
+  --destructive: #dc3545;
+  --destructive-foreground: #ffffff;
+  --border: #dee2e6;
+  --input: #dee2e6;
+  --ring: #5bc0de;
+  /* Colores decorativos (tints del sidebar, tarjetas de módulo). NO
+     alimentan las gráficas reales de Indicadores; ver --viz-* más abajo. */
+  --chart-1: #5bc0de;
+  --chart-2: #0dcaf0;
+  --chart-3: #198754;
+  --chart-4: #ffc107;
+  --chart-5: #fd7e14;
+  /* Paleta categórica validada (scripts/validate_palette.js) contra la
+     superficie de tarjeta #ffffff — usada SOLO por las gráficas de datos
+     reales (components/indicadores/charts.tsx). Se mantiene separada de
+     --chart-* porque el set de Lipgo (#ffc107 entre otros) falla la
+     validación de accesibilidad (contraste y piso de croma). No cambiar
+     por gusto, revalidar si se ajusta. --viz-1 se usa además como color
+     único para gráficas de una sola serie (ver skill de dataviz: "una
+     serie → un color"). */
+  --viz-1: #2a78d6;
+  --viz-2: #1baf7a;
+  --viz-3: #eda100;
+  --viz-4: #008300;
+  --viz-5: #4a3aa7;
+  --viz-6: #e34948;
+  --radius: 0.75rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #343a40;
+  --sidebar-primary: #5bc0de;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e9ecef;
+  --sidebar-accent-foreground: #343a40;
+  --sidebar-border: #dee2e6;
+  --sidebar-ring: #5bc0de;
+}
+
+.dark {
+  --background: #1a1d20;
+  --foreground: #e9ecef;
+  --card: #212529;
+  --card-foreground: #e9ecef;
+  --popover: #212529;
+  --popover-foreground: #e9ecef;
+  --primary: #5bc0de;
+  --primary-foreground: #ffffff;
+  --secondary: #495057;
+  --secondary-foreground: #e9ecef;
+  --muted: #343a40;
+  --muted-foreground: #adb5bd;
+  --accent: #5bc0de;
+  --accent-foreground: #ffffff;
+  --destructive: #dc3545;
+  --destructive-foreground: #ffffff;
+  --border: #495057;
+  --input: #495057;
+  --ring: #5bc0de;
+  --chart-1: #5bc0de;
+  --chart-2: #0dcaf0;
+  --chart-3: #198754;
+  --chart-4: #ffc107;
+  --chart-5: #fd7e14;
+  /* Paleta categórica validada contra la superficie de tarjeta oscura #212529. */
+  --viz-1: #3987e5;
+  --viz-2: #199e70;
+  --viz-3: #c98500;
+  --viz-4: #008300;
+  --viz-5: #9085e9;
+  --viz-6: #e66767;
+  --sidebar: #212529;
+  --sidebar-foreground: #e9ecef;
+  --sidebar-primary: #5bc0de;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #343a40;
+  --sidebar-accent-foreground: #e9ecef;
+  --sidebar-border: #495057;
+  --sidebar-ring: #5bc0de;
+}
+
+@theme inline {
+  --font-sans: 'Geist', 'Geist Fallback';
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-viz-1: var(--viz-1);
+  --color-viz-2: var(--viz-2);
+  --color-viz-3: var(--viz-3);
+  --color-viz-4: var(--viz-4);
+  --color-viz-5: var(--viz-5);
+  --color-viz-6: var(--viz-6);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Oculta la barra de scroll en tarjetas de estadísticas con overflow
+     horizontal en mobile (mismo helper que usa Lipgo). */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
