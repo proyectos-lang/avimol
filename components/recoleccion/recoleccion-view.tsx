@@ -15,7 +15,6 @@ import {
   registrarRecoleccion,
   type GalponConLoteActivo,
   type ColorHuevo,
-  type OrigenRecoleccion,
   type TipoAveria,
 } from "@/lib/recoleccion-actions"
 import { listarBodegasClasificadoras, type Bodega } from "@/lib/bodegas-actions"
@@ -48,7 +47,6 @@ export function RecoleccionView() {
   const [anaqueles, setAnaqueles] = useState<Anaquel[]>([])
   const [cargando, setCargando] = useState(true)
 
-  const [origen, setOrigen] = useState<OrigenRecoleccion>("app_movil")
   const [galponId, setGalponId] = useState("")
   const [bodegaId, setBodegaId] = useState("")
   const [anaquelId, setAnaquelId] = useState("")
@@ -136,7 +134,7 @@ export function RecoleccionView() {
       edadSemanasCaptura: galponSeleccionado.edad_actual_semanas,
       bodegaId: Number(bodegaId),
       anaquelId: anaquelId ? Number(anaquelId) : null,
-      origen,
+      origen: "app_movil",
       cantidades: cantidadesEnviar,
       averias: (Object.entries(averias) as [TipoAveria, string][])
         .map(([tipoAveria, valor]) => ({ tipoAveria, referenciaId: null, cantidad: Number(valor) || 0 }))
@@ -175,27 +173,6 @@ export function RecoleccionView() {
           </CardContent>
         </Card>
       )}
-
-      <div className="mb-6 flex gap-2">
-        <Button
-          type="button"
-          variant={origen === "app_movil" ? "default" : "outline"}
-          className="flex-1"
-          size="lg"
-          onClick={() => setOrigen("app_movil")}
-        >
-          Recolección en campo
-        </Button>
-        <Button
-          type="button"
-          variant={origen === "manual_clasificadora" ? "default" : "outline"}
-          className="flex-1"
-          size="lg"
-          onClick={() => setOrigen("manual_clasificadora")}
-        >
-          Ingreso en clasificadora
-        </Button>
-      </div>
 
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-2">
