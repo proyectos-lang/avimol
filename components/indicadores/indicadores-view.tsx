@@ -13,19 +13,15 @@ import {
   obtenerPedidosPeriodo,
   obtenerAverias,
   obtenerTiemposLogisticos,
-  obtenerProduccionPorGalpon,
-  obtenerIndicadoresAves,
   type InventarioActualFila,
   type VentasResumen,
   type AveriasPorEtapa,
   type AveriasPorTipo,
   type AveriasPorEtapaYTipo,
   type TiemposLogisticos,
-  type ProduccionGalpon,
-  type IndicadoresAves,
 } from "@/lib/indicadores-actions"
 import { exportarIndicadoresExcel } from "@/lib/export-excel"
-import { VentasPorReferenciaChart, PedidosPorReferenciaChart, AveriasPorEtapaChart, ProduccionPorGalponChart } from "@/components/indicadores/charts"
+import { VentasPorReferenciaChart, PedidosPorReferenciaChart, AveriasPorEtapaChart } from "@/components/indicadores/charts"
 
 const ETAPA_LABEL: Record<string, string> = {
   recoleccion: "Recolección",
@@ -133,8 +129,6 @@ export function IndicadoresView() {
     total: number
   } | null>(null)
   const [tiempos, setTiempos] = useState<TiemposLogisticos[]>([])
-  const [produccion, setProduccion] = useState<ProduccionGalpon[]>([])
-  const [aves, setAves] = useState<IndicadoresAves | null>(null)
   const [cargando, setCargando] = useState(true)
 
   async function cargarTodo() {
@@ -143,14 +137,12 @@ export function IndicadoresView() {
     const tienePeriodo = !!fechaInicio && !!fechaFin
     const periodoAnterior = tienePeriodo ? calcularPeriodoAnterior(fechaInicio, fechaFin) : null
 
-    const [inv, vpd, ped, ave, tie, prod, avesData, vpdAnt, pedAnt] = await Promise.all([
+    const [inv, vpd, ped, ave, tie, vpdAnt, pedAnt] = await Promise.all([
       obtenerInventarioActual(),
       obtenerVentasPuntoVenta(fechaInicio || undefined, fechaFin || undefined),
       obtenerPedidosPeriodo(fechaInicio || undefined, fechaFin || undefined),
       obtenerAverias(),
       obtenerTiemposLogisticos(),
-      obtenerProduccionPorGalpon(),
-      obtenerIndicadoresAves(fechaInicio || undefined, fechaFin || undefined),
       periodoAnterior ? obtenerVentasPuntoVenta(periodoAnterior.inicio, periodoAnterior.fin) : Promise.resolve(null),
       periodoAnterior ? obtenerPedidosPeriodo(periodoAnterior.inicio, periodoAnterior.fin) : Promise.resolve(null),
     ])
@@ -159,8 +151,6 @@ export function IndicadoresView() {
     setPedidos(ped)
     setAverias(ave)
     setTiempos(tie)
-    setProduccion(prod)
-    setAves(avesData)
     setVentasPdvAnterior(vpdAnt)
     setPedidosAnterior(pedAnt)
     setCargando(false)
@@ -214,28 +204,6 @@ export function IndicadoresView() {
             "Espera vehículo (min)": t.esperaVehiculoPromedioMin ?? "",
             "Duración cargue (min)": t.duracionCarguePromedioMin ?? "",
             "Duración descargue (min)": t.duracionDescarguePromedioMin ?? "",
-          })),
-        },
-        {
-          nombre: "Producción por galpón",
-          filas: produccion.map((p) => ({
-            Galpón: `${p.galponCodigo} — ${p.galponNombre}`,
-            "Cantidad recolectada": p.cantidadTotal,
-            "Edad promedio (semanas)": p.edadPromedioSemanas,
-          })),
-        },
-        {
-          nombre: "Aves por galpón",
-          filas: (aves?.porGalpon ?? []).map((g) => ({
-            Galpón: `${g.galponCodigo} — ${g.galponNombre}`,
-            Capacidad: g.capacidad ?? 0,
-            Utilizada: g.utilizada,
-            "% ocupación": g.porcentajeOcupacion,
-            Mortalidad: g.mortalidad,
-            "Tasa mortalidad (%)": g.tasaMortalidad,
-            Sacrificio: g.sacrificio,
-            "Tasa sacrificio (%)": g.tasaSacrificio,
-            "Edad promedio (semanas)": g.edadPromedioSemanas,
           })),
         },
       ],
@@ -373,85 +341,6 @@ export function IndicadoresView() {
                 <TableCell>{t.esperaVehiculoPromedioMin ?? "—"}</TableCell>
                 <TableCell>{t.duracionCarguePromedioMin ?? "—"}</TableCell>
                 <TableCell>{t.duracionDescarguePromedioMin ?? "—"}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      <h2 className="mb-2 text-lg font-semibold">Producción por galpón</h2>
-      <div className="mb-6">
-        <ProduccionPorGalponChart datos={produccion} />
-      </div>
-      <div className="mb-6 overflow-x-auto rounded-lg border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Galpón</TableHead>
-              <TableHead>Cantidad recolectada</TableHead>
-              <TableHead>Edad promedio (semanas)</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {produccion.map((p) => (
-              <TableRow key={p.galponCodigo}>
-                <TableCell>
-                  {p.galponCodigo} — {p.galponNombre}
-                </TableCell>
-                <TableCell>{p.cantidadTotal.toLocaleString("es-CO")}</TableCell>
-                <TableCell>{p.edadPromedioSemanas}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      <h2 className="mb-2 text-lg font-semibold">Aves</h2>
-      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatCard
-          titulo="Capacidad vs. utilizada"
-          valor={`${(aves?.utilizadaTotal ?? 0).toLocaleString("es-CO")} / ${(aves?.capacidadTotal ?? 0).toLocaleString("es-CO")}`}
-        />
-        <StatCard titulo="% ocupación total" valor={`${aves?.porcentajeOcupacionTotal ?? 0}%`} />
-        <StatCard titulo="Edad promedio total" valor={`${aves?.edadPromedioTotal ?? 0} sem`} />
-        <StatCard
-          titulo="Mortalidad total"
-          valor={`${(aves?.mortalidadTotal ?? 0).toLocaleString("es-CO")} (${aves?.tasaMortalidadTotal ?? 0}%)`}
-        />
-        <StatCard
-          titulo="Sacrificio total"
-          valor={`${(aves?.sacrificioTotal ?? 0).toLocaleString("es-CO")} (${aves?.tasaSacrificioTotal ?? 0}%)`}
-        />
-      </div>
-      <div className="mb-6 overflow-x-auto rounded-lg border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Galpón</TableHead>
-              <TableHead className="text-right">Capacidad</TableHead>
-              <TableHead className="text-right">Utilizada</TableHead>
-              <TableHead className="text-right">% ocupación</TableHead>
-              <TableHead className="text-right">Mortalidad</TableHead>
-              <TableHead className="text-right">Sacrificio</TableHead>
-              <TableHead className="text-right">Edad promedio</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(aves?.porGalpon ?? []).map((g) => (
-              <TableRow key={g.galponId}>
-                <TableCell>
-                  {g.galponCodigo} — {g.galponNombre}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{(g.capacidad ?? 0).toLocaleString("es-CO")}</TableCell>
-                <TableCell className="text-right tabular-nums">{g.utilizada.toLocaleString("es-CO")}</TableCell>
-                <TableCell className="text-right tabular-nums">{g.porcentajeOcupacion}%</TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {g.mortalidad.toLocaleString("es-CO")} ({g.tasaMortalidad}%)
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {g.sacrificio.toLocaleString("es-CO")} ({g.tasaSacrificio}%)
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{g.edadPromedioSemanas} sem</TableCell>
               </TableRow>
             ))}
           </TableBody>

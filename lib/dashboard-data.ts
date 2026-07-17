@@ -49,6 +49,7 @@ export const groups: GrupoNav[] = [
     modules: [
       { label: "Galpones", href: "/galpones", icon: Warehouse },
       { label: "Lotes de aves", href: "/aves", icon: Bird },
+      { label: "Indicadores", href: "/aves/indicadores", icon: BarChart3 },
     ],
   },
   {
@@ -61,6 +62,7 @@ export const groups: GrupoNav[] = [
       { label: "Clasificación", href: "/clasificacion", icon: Layers },
       { label: "Lotes de huevo", href: "/lotes-huevo", icon: ClipboardList },
       { label: "Historial diario", href: "/recoleccion/historial", icon: CalendarDays },
+      { label: "Indicadores", href: "/recoleccion/indicadores", icon: BarChart3 },
     ],
   },
   {
