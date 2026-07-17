@@ -458,6 +458,23 @@ Verificado con Playwright contra la BD real: traslado parcial de 997 aves del lo
 
 **Nota (Ronda 11):** el lote `TEST-PARCIAL-151534` (997 aves, actualmente en G-03 tras las dos pruebas) es un dato real creado durante esta verificación — queda en la base de datos de producción, no se revirtió (no hay función para eliminar un lote ni deshacer un traslado).
 
+### Ronda 12 — Subir imágenes del catálogo a Supabase Storage (2026-07-17)
+El cliente pidió que en `/catalogo` la imagen de cada referencia se suba desde el computador en vez de pegar una URL a mano. Es la primera vez que este proyecto usa Supabase Storage — no había ningún precedente en el código.
+
+`getAvimolDb()` (`lib/supabase-avimol.ts`) ya usa la service-role key, que sirve igual para Storage (bypassa RLS de `storage.objects` igual que bypassa RLS de las tablas de `avimol`) — no hizo falta un cliente nuevo ni políticas. Como no hay key anónima configurada, la subida pasa por una server action que recibe un `FormData` con el `File` (Next lo soporta nativo).
+
+**`lib/catalogo-actions.ts`** ganó `subirImagenReferencia(referenciaId, formData)`: valida tipo (`png/jpeg/webp/gif`) y tamaño (máx. 5MB), crea el bucket `avimol` si no existe (`getBucket` → `createBucket({ public: true })`, ignorando el error si ya existe — idempotente, no requiere que el usuario haga nada manual en el dashboard de Supabase), sube el archivo a `catalogo/{referenciaId}.{ext}` con `upsert: true` (mismo path siempre → resubir sobrescribe, nunca queda basura en el bucket dado que el catálogo son solo 8 referencias) y devuelve la URL pública con cache-busting (`?v=timestamp`, para que el navegador no muestre la imagen vieja en caché tras reemplazarla). Esta función es solo de storage — `actualizarReferencia()` sigue siendo el único lugar que escribe `imagen_url` en la base de datos, igual que antes.
+
+**`components/catalogo/catalogo-view.tsx`**: el campo de texto "URL de la imagen" se reemplazó por un `Input type="file" accept="image/*"` con preview instantáneo (`URL.createObjectURL`) sobre la misma miniatura `aspect-square`/`ImageOff` que ya usaba la vista. Al guardar: si se eligió un archivo nuevo, primero sube (si falla, `toast.error` y no guarda nada); si no, se conserva la URL ya existente — mismo flujo de `actualizarReferencia` de siempre. `components/pedidos/catalogo-picker.tsx` (el otro lugar que muestra estas imágenes) no necesitó ningún cambio, sigue leyendo `imagen_url` en un `<img>` plano sin importar de dónde venga la URL.
+
+**`next.config.mjs`** subió `experimental.serverActions.bodySizeLimit` a `6mb` (el default de Next 16 es 1MB, insuficiente para una imagen de hasta 5MB) — este cambio requiere reiniciar el dev server, no aplica en caliente.
+
+No hizo falta migración SQL: crear el bucket es una llamada a la API de Storage en tiempo de ejecución, no una migración de esquema, y `referencias_huevo.imagen_url` ya existía como `text`.
+
+Verificado con Playwright contra el proyecto de Supabase real: se subió una imagen de prueba a la referencia "A Rojo" y la URL guardada quedó `https://izibxufnaecgtfsjgffd.supabase.co/storage/v1/object/public/avimol/catalogo/1.png?v=...` (bucket `avimol` creado automáticamente); se subió una segunda imagen distinta a la misma referencia y confirmó que sobrescribió el mismo path (`catalogo/1.png`) con un nuevo `?v=`, sin crear un archivo adicional. Sin errores de consola. `npx tsc --noEmit` limpio.
+
+**Nota (Ronda 12):** el bucket `avimol` fue creado en el proyecto de Supabase real durante esta verificación y contiene una imagen de prueba real en `catalogo/1.png` (referencia "A Rojo") — no se revirtió.
+
 ---
 
 ## 5. Cómo levantar el entorno de desarrollo

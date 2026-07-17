@@ -50,3 +50,60 @@ export async function actualizarReferencia(
   }
   return { success: true }
 }
+
+const BUCKET = "avimol"
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const ALLOWED_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"])
+
+async function asegurarBucket() {
+  const db = getAvimolDb()
+  const { data: existente } = await db.storage.getBucket(BUCKET)
+  if (existente) return
+  const { error } = await db.storage.createBucket(BUCKET, { public: true })
+  // Carrera entre dos llamadas concurrentes creando el bucket por primera vez.
+  if (error && !/already exists|duplicate/i.test(error.message)) throw error
+}
+
+// Sube la imagen al bucket "avimol" (path estable por referencia, con
+// upsert: sobrescribe la anterior en vez de acumular basura) y devuelve
+// la URL pública con cache-busting. NO escribe en referencias_huevo —
+// eso lo sigue haciendo actualizarReferencia, igual que hoy.
+export async function subirImagenReferencia(
+  referenciaId: number,
+  formData: FormData,
+): Promise<{ success: boolean; message?: string; url?: string }> {
+  const archivo = formData.get("archivo")
+  if (!(archivo instanceof File) || archivo.size === 0) {
+    return { success: false, message: "No se seleccionó ningún archivo." }
+  }
+  if (!ALLOWED_MIME.has(archivo.type)) {
+    return { success: false, message: "Formato no soportado. Usa PNG, JPG, WEBP o GIF." }
+  }
+  if (archivo.size > MAX_IMAGE_BYTES) {
+    return { success: false, message: "La imagen no puede superar 5MB." }
+  }
+
+  try {
+    await asegurarBucket()
+  } catch (error: any) {
+    console.error("[avimol] Error creando bucket de storage:", error)
+    return { success: false, message: "No se pudo preparar el almacenamiento de imágenes." }
+  }
+
+  const ext = (archivo.name.split(".").pop() || archivo.type.split("/")[1] || "jpg").toLowerCase()
+  const path = `catalogo/${referenciaId}.${ext}`
+  const bytes = Buffer.from(await archivo.arrayBuffer())
+
+  const db = getAvimolDb()
+  const { error: uploadError } = await db.storage.from(BUCKET).upload(path, bytes, {
+    contentType: archivo.type,
+    upsert: true,
+  })
+  if (uploadError) {
+    console.error("[avimol] Error subiendo imagen:", uploadError)
+    return { success: false, message: "No se pudo subir la imagen: " + uploadError.message }
+  }
+
+  const { data } = db.storage.from(BUCKET).getPublicUrl(path)
+  return { success: true, url: `${data.publicUrl}?v=${Date.now()}` }
+}
