@@ -4,7 +4,7 @@ import { getAvimolDb } from "@/lib/supabase-avimol"
 import { obtenerUsuarioActual } from "@/lib/auth/actions"
 import { fechaColombiaHoy, fechaHoraColombiaISO } from "@/lib/date-utils"
 import { obtenerTarifaVigente } from "@/lib/tarifas-actions"
-import type { TipoAveria } from "@/lib/recoleccion-actions"
+import { liberarVehiculoDeOrden } from "@/lib/vehiculos-actions"
 
 const TABLA_POR_PREFIJO = {
   TRA: "solicitudes_traslado",
@@ -136,6 +136,7 @@ export interface OrdenCargueResumen {
   id: number
   codigo: string
   tipo_operacion: string
+  bodega_id: number
   bodega_nombre: string
   estado: string
   hora_llegada_vehiculo: string | null
@@ -152,7 +153,7 @@ export async function listarOrdenesCargue(tipoOperacion: string): Promise<OrdenC
   const { data, error } = await db
     .from("ordenes_cargue")
     .select(
-      "id, codigo, tipo_operacion, estado, hora_llegada_vehiculo, hora_inicio_cargue, hora_fin_cargue, hora_inicio_descargue, hora_fin_descargue, peso_total_kg, bodegas(nombre), solicitudes_traslado(codigo), pedidos(codigo)",
+      "id, codigo, tipo_operacion, bodega_id, estado, hora_llegada_vehiculo, hora_inicio_cargue, hora_fin_cargue, hora_inicio_descargue, hora_fin_descargue, peso_total_kg, bodegas(nombre), solicitudes_traslado(codigo), pedidos(codigo)",
     )
     .eq("tipo_operacion", tipoOperacion)
     .order("id", { ascending: false })
@@ -166,6 +167,7 @@ export async function listarOrdenesCargue(tipoOperacion: string): Promise<OrdenC
     id: fila.id,
     codigo: fila.codigo,
     tipo_operacion: fila.tipo_operacion,
+    bodega_id: fila.bodega_id,
     bodega_nombre: fila.bodegas?.nombre ?? "",
     estado: fila.estado,
     hora_llegada_vehiculo: fila.hora_llegada_vehiculo,
@@ -342,17 +344,6 @@ export async function obtenerOrdenConDetalle(ordenId: number): Promise<OrdenCarg
   }
 }
 
-export async function iniciarCargue(ordenId: number): Promise<{ success: boolean; message?: string }> {
-  const db = getAvimolDb()
-  const { error } = await db
-    .from("ordenes_cargue")
-    .update({ hora_inicio_cargue: fechaHoraColombiaISO(), estado: "cargado" })
-    .eq("id", ordenId)
-
-  if (error) return { success: false, message: error.message }
-  return { success: true }
-}
-
 export interface LoteDisponible {
   lote_huevo_id: number
   lote_huevo_codigo: string
@@ -504,6 +495,40 @@ export async function agregarLineaCargue(
     return { success: false, message: "No se pudo agregar la línea: " + error.message }
   }
 
+  // Primera línea de esta orden: arranca el cargue automáticamente (antes
+  // exigía un botón "Iniciar cargue" aparte, y solo se podía picking
+  // después de asignar vehículo — ahora el picking puede empezar sin
+  // vehículo todavía, ver Fase D del plan de cargue invertido).
+  const { data: orden } = await db
+    .from("ordenes_cargue")
+    .select("hora_inicio_cargue, solicitud_traslado_id, pedido_id")
+    .eq("id", ordenId)
+    .single()
+
+  if (orden && !orden.hora_inicio_cargue) {
+    await db
+      .from("ordenes_cargue")
+      .update({ hora_inicio_cargue: fechaHoraColombiaISO(), estado: "cargado" })
+      .eq("id", ordenId)
+
+    if (orden.solicitud_traslado_id) {
+      const { data: solicitud } = await db
+        .from("solicitudes_traslado")
+        .select("estado")
+        .eq("id", orden.solicitud_traslado_id)
+        .single()
+      if (solicitud?.estado === "pendiente") {
+        await db.from("solicitudes_traslado").update({ estado: "en_picking" }).eq("id", orden.solicitud_traslado_id)
+      }
+    }
+    if (orden.pedido_id) {
+      const { data: pedido } = await db.from("pedidos").select("estado").eq("id", orden.pedido_id).single()
+      if (pedido?.estado === "pendiente") {
+        await db.from("pedidos").update({ estado: "en_picking" }).eq("id", orden.pedido_id)
+      }
+    }
+  }
+
   return { success: true }
 }
 
@@ -513,7 +538,110 @@ export async function quitarLineaCargue(detalleId: number): Promise<{ success: b
   return { success: true }
 }
 
-export async function confirmarFinCargue(ordenId: number): Promise<{ success: boolean; message?: string }> {
+// Anula una orden de cargue (traslado o despacho) que todavía no ha
+// finalizado — segura porque agregarLineaCargue nunca descuenta
+// inventario real (solo lo hace confirmarFinCargue/confirmarFinDespacho
+// al cerrar). Libera el vehículo si tenía uno asignado.
+export async function anularOrdenCargue(ordenId: number): Promise<{ success: boolean; message?: string }> {
+  const db = getAvimolDb()
+
+  const { data: orden, error: errorOrden } = await db
+    .from("ordenes_cargue")
+    .select("tipo_operacion, hora_fin_cargue")
+    .eq("id", ordenId)
+    .maybeSingle()
+
+  if (errorOrden || !orden) return { success: false, message: "Orden no encontrada" }
+  if (orden.tipo_operacion !== "cargue_traslado" && orden.tipo_operacion !== "cargue_despacho") {
+    return { success: false, message: "Solo se pueden anular órdenes de cargue" }
+  }
+  if (orden.hora_fin_cargue) return { success: false, message: "La orden ya fue finalizada" }
+
+  await db.from("ordenes_cargue_detalle").delete().eq("orden_cargue_id", ordenId)
+  await liberarVehiculoDeOrden(ordenId)
+  await db.from("ordenes_cargue").update({ estado: "anulado" }).eq("id", ordenId)
+
+  return { success: true }
+}
+
+export interface LineaProgresoCargue {
+  referenciaId: number
+  referenciaNombre: string
+  cantidadSolicitada: number
+  cantidadCargadaTotal: number
+  cantidadPendiente: number
+}
+
+// Suma cuánto se ha cargado en TODAS las órdenes de cargue (no anuladas)
+// asociadas a una misma solicitud de traslado o pedido — necesario
+// porque ahora una solicitud/pedido puede cubrirse con varios viajes
+// (cargue parcial).
+export async function calcularProgresoCargue(
+  origenLineas: { referenciaId: number; referenciaNombre: string; cantidadSolicitada: number }[],
+  filtroColumna: "solicitud_traslado_id" | "pedido_id",
+  filtroId: number,
+): Promise<LineaProgresoCargue[]> {
+  const db = getAvimolDb()
+
+  const { data: ordenes } = await db
+    .from("ordenes_cargue")
+    .select("id")
+    .eq(filtroColumna, filtroId)
+    .in("tipo_operacion", ["cargue_traslado", "cargue_despacho"])
+    .neq("estado", "anulado")
+
+  const ordenIds = (ordenes ?? []).map((o: any) => o.id)
+  const cargadoPorReferencia = new Map<number, number>()
+
+  if (ordenIds.length > 0) {
+    const { data: detalle } = await db
+      .from("ordenes_cargue_detalle")
+      .select("referencia_huevo_id, cantidad_cargada")
+      .in("orden_cargue_id", ordenIds)
+
+    for (const d of (detalle ?? []) as any[]) {
+      cargadoPorReferencia.set(
+        d.referencia_huevo_id,
+        (cargadoPorReferencia.get(d.referencia_huevo_id) ?? 0) + d.cantidad_cargada,
+      )
+    }
+  }
+
+  return origenLineas.map((l) => {
+    const cargado = cargadoPorReferencia.get(l.referenciaId) ?? 0
+    return {
+      referenciaId: l.referenciaId,
+      referenciaNombre: l.referenciaNombre,
+      cantidadSolicitada: l.cantidadSolicitada,
+      cantidadCargadaTotal: cargado,
+      cantidadPendiente: Math.max(0, l.cantidadSolicitada - cargado),
+    }
+  })
+}
+
+export async function evaluarCierreOrdenCargue(
+  ordenId: number,
+): Promise<{ completo: boolean; lineas: LineaProgresoCargue[] } | null> {
+  const orden = await obtenerOrdenConDetalle(ordenId)
+  if (!orden) return null
+
+  if (orden.solicitud) {
+    const lineas = await calcularProgresoCargue(orden.solicitud.lineas, "solicitud_traslado_id", orden.solicitud.id)
+    return { completo: lineas.every((l) => l.cantidadPendiente === 0), lineas }
+  }
+  if (orden.pedido) {
+    const lineas = await calcularProgresoCargue(orden.pedido.lineas, "pedido_id", orden.pedido.id)
+    return { completo: lineas.every((l) => l.cantidadPendiente === 0), lineas }
+  }
+  return { completo: true, lineas: [] }
+}
+
+export type AccionCierreCargue = "cerrar" | "mantener_pendiente"
+
+export async function confirmarFinCargue(
+  ordenId: number,
+  accion: AccionCierreCargue = "cerrar",
+): Promise<{ success: boolean; message?: string }> {
   const db = getAvimolDb()
   const usuario = await obtenerUsuarioActual()
 
@@ -594,10 +722,143 @@ export async function confirmarFinCargue(ordenId: number): Promise<{ success: bo
       )
     }
 
-    await db.from("solicitudes_traslado").update({ estado: "cargado" }).eq("id", orden.solicitud!.id)
+    const progreso = await evaluarCierreOrdenCargue(ordenId)
+    const accionFinal = progreso?.completo ? "cerrar" : accion
+    await db
+      .from("solicitudes_traslado")
+      .update({ estado: accionFinal === "cerrar" ? "cargado" : "cargado_parcial" })
+      .eq("id", orden.solicitud!.id)
   }
 
   return { success: true }
+}
+
+// Genera una orden de cargue adicional sobre una solicitud de traslado
+// que quedó con remanente (cargue parcial) — un segundo viaje, posible-
+// mente con otro vehículo, para completar lo que faltó.
+export async function generarOrdenCargueAdicionalTraslado(
+  solicitudId: number,
+): Promise<{ success: boolean; message?: string; ordenCargueId?: number }> {
+  const db = getAvimolDb()
+  const usuario = await obtenerUsuarioActual()
+
+  const { data: solicitud, error: errorSolicitud } = await db
+    .from("solicitudes_traslado")
+    .select("id, estado, bodega_origen_id")
+    .eq("id", solicitudId)
+    .maybeSingle()
+
+  if (errorSolicitud || !solicitud) return { success: false, message: "Solicitud no encontrada" }
+  if (!["pendiente", "en_picking", "cargado_parcial"].includes(solicitud.estado)) {
+    return { success: false, message: "Esta solicitud ya no admite más órdenes de cargue" }
+  }
+
+  const { data: ordenAbierta } = await db
+    .from("ordenes_cargue")
+    .select("id, codigo")
+    .eq("solicitud_traslado_id", solicitudId)
+    .eq("tipo_operacion", "cargue_traslado")
+    .is("hora_fin_cargue", null)
+    .neq("estado", "anulado")
+    .maybeSingle()
+
+  if (ordenAbierta) {
+    return { success: false, message: `Ya hay una orden abierta: ${ordenAbierta.codigo}. Complétala o anúlala antes de generar otra.` }
+  }
+
+  const codigoOrden = await generarCodigoOrden("CAR")
+  const { data: orden, error: errorOrden } = await db
+    .from("ordenes_cargue")
+    .insert({
+      tipo_operacion: "cargue_traslado",
+      bodega_id: solicitud.bodega_origen_id,
+      solicitud_traslado_id: solicitudId,
+      codigo: codigoOrden,
+      estado: "pendiente",
+      usuario_id: usuario?.id ?? null,
+    })
+    .select("id")
+    .single()
+
+  if (errorOrden || !orden) {
+    console.error("[avimol] Error generando orden de cargue adicional:", errorOrden)
+    return { success: false, message: "No se pudo generar la orden: " + errorOrden?.message }
+  }
+
+  return { success: true, ordenCargueId: orden.id }
+}
+
+export interface ProgresoSolicitudTraslado {
+  solicitud: {
+    id: number
+    codigo: string
+    estado: string
+    bodegaOrigenNombre: string
+    bodegaDestinoNombre: string
+  }
+  lineas: LineaProgresoCargue[]
+  ordenes: OrdenCargueResumen[]
+}
+
+export async function obtenerProgresoSolicitudTraslado(solicitudId: number): Promise<ProgresoSolicitudTraslado | null> {
+  const db = getAvimolDb()
+
+  const { data: solicitud, error } = await db
+    .from("solicitudes_traslado")
+    .select("id, codigo, estado, origen:bodega_origen_id(nombre), destino:bodega_destino_id(nombre)")
+    .eq("id", solicitudId)
+    .maybeSingle()
+
+  if (error || !solicitud) return null
+
+  const { data: detalleLineas } = await db
+    .from("solicitudes_traslado_detalle")
+    .select("referencia_huevo_id, cantidad_solicitada, referencias_huevo(nombre)")
+    .eq("solicitud_traslado_id", solicitudId)
+
+  const origenLineas = (detalleLineas ?? []).map((l: any) => ({
+    referenciaId: l.referencia_huevo_id,
+    referenciaNombre: l.referencias_huevo?.nombre ?? "",
+    cantidadSolicitada: l.cantidad_solicitada,
+  }))
+
+  const lineas = await calcularProgresoCargue(origenLineas, "solicitud_traslado_id", solicitudId)
+
+  const { data: ordenesData } = await db
+    .from("ordenes_cargue")
+    .select(
+      "id, codigo, tipo_operacion, bodega_id, estado, hora_llegada_vehiculo, hora_inicio_cargue, hora_fin_cargue, hora_inicio_descargue, hora_fin_descargue, peso_total_kg, bodegas(nombre)",
+    )
+    .eq("solicitud_traslado_id", solicitudId)
+    .order("id", { ascending: false })
+
+  const ordenes: OrdenCargueResumen[] = (ordenesData ?? []).map((o: any) => ({
+    id: o.id,
+    codigo: o.codigo,
+    tipo_operacion: o.tipo_operacion,
+    bodega_id: o.bodega_id,
+    bodega_nombre: o.bodegas?.nombre ?? "",
+    estado: o.estado,
+    hora_llegada_vehiculo: o.hora_llegada_vehiculo,
+    hora_inicio_cargue: o.hora_inicio_cargue,
+    hora_fin_cargue: o.hora_fin_cargue,
+    hora_inicio_descargue: o.hora_inicio_descargue,
+    hora_fin_descargue: o.hora_fin_descargue,
+    peso_total_kg: o.peso_total_kg,
+    solicitud_codigo: solicitud.codigo,
+  }))
+
+  return {
+    solicitud: {
+      id: solicitud.id,
+      codigo: solicitud.codigo,
+      estado: solicitud.estado,
+      bodegaOrigenNombre: (solicitud as any).origen?.nombre ?? "",
+      bodegaDestinoNombre: (solicitud as any).destino?.nombre ?? "",
+    },
+    lineas,
+    ordenes,
+  }
 }
 
 export async function iniciarDescargue(ordenId: number): Promise<{ success: boolean; message?: string }> {
@@ -614,23 +875,18 @@ export async function iniciarDescargue(ordenId: number): Promise<{ success: bool
 export interface LineaRecepcion {
   detalleId: number
   cantidadRecibida: number
-  anaquelDestinoId?: number | null
-  tipoAveria?: TipoAveria
-  averias?: {
-    tipoAveria: "roto" | "picado"
-    cantidad: number
-    cantidadYemas: number | null
-    cantidadBolsasYema: number | null
-    observaciones: string | null
-  }[]
 }
 
+// Descargue ahora solo confirma cuánto llegó físicamente por línea — ya
+// no acredita inventario ni pide estantería/avería en este paso. Eso se
+// mueve a Recepciones → Clasificar (confirmarClasificacionRecepcion en
+// lib/recepciones-actions.ts), que reparte lo recibido en bueno/roto/
+// picado/partido y solo entonces el inventario queda disponible.
 export async function confirmarFinDescargue(
   ordenId: number,
   lineas: LineaRecepcion[],
 ): Promise<{ success: boolean; message?: string }> {
   const db = getAvimolDb()
-  const usuario = await obtenerUsuarioActual()
 
   const orden = await obtenerOrdenConDetalle(ordenId)
   if (!orden) return { success: false, message: "Orden no encontrada" }
@@ -643,78 +899,6 @@ export async function confirmarFinDescargue(
       .from("ordenes_cargue_detalle")
       .update({ cantidad_recibida: recibida.cantidadRecibida })
       .eq("id", linea.id)
-
-    const anaquelDestinoId = recibida.anaquelDestinoId ?? null
-
-    // Ingresa a inventario de la bodega destino conservando lote, galpón, edad y clasificación.
-    let queryExistente = db
-      .from("inventario_huevo")
-      .select("id, cantidad_disponible")
-      .eq("bodega_id", orden.bodega_id)
-      .eq("lote_huevo_id", linea.lote_huevo_id)
-      .eq("referencia_huevo_id", linea.referencia_huevo_id)
-    queryExistente = anaquelDestinoId
-      ? queryExistente.eq("anaquel_id", anaquelDestinoId)
-      : queryExistente.is("anaquel_id", null)
-    const { data: existente } = await queryExistente.maybeSingle()
-
-    if (existente) {
-      await db
-        .from("inventario_huevo")
-        .update({
-          cantidad_disponible: existente.cantidad_disponible + recibida.cantidadRecibida,
-          actualizado_en: fechaHoraColombiaISO(),
-        })
-        .eq("id", existente.id)
-    } else {
-      await db.from("inventario_huevo").insert({
-        bodega_id: orden.bodega_id,
-        lote_huevo_id: linea.lote_huevo_id,
-        referencia_huevo_id: linea.referencia_huevo_id,
-        anaquel_id: anaquelDestinoId,
-        cantidad_disponible: recibida.cantidadRecibida,
-      })
-    }
-
-    await db.from("movimientos_inventario_huevo").insert({
-      bodega_id: orden.bodega_id,
-      lote_huevo_id: linea.lote_huevo_id,
-      referencia_huevo_id: linea.referencia_huevo_id,
-      anaquel_id: anaquelDestinoId,
-      tipo_movimiento: "entrada_recepcion_traslado",
-      cantidad: recibida.cantidadRecibida,
-      orden_cargue_id: ordenId,
-      usuario_id: usuario?.id ?? null,
-      creado_en: fechaHoraColombiaISO(),
-    })
-
-    const faltante = linea.cantidad_cargada - recibida.cantidadRecibida
-    if (recibida.averias && recibida.averias.length > 0) {
-      await db.from("averias_huevo").insert(
-        recibida.averias.map((a) => ({
-          lote_huevo_id: linea.lote_huevo_id,
-          referencia_huevo_id: linea.referencia_huevo_id,
-          etapa: "recepcion",
-          tipo_averia: a.tipoAveria,
-          cantidad: a.cantidad,
-          cantidad_yemas: a.cantidadYemas,
-          cantidad_bolsas_yema: a.cantidadBolsasYema,
-          observaciones: a.observaciones,
-          orden_cargue_id: ordenId,
-          usuario_id: usuario?.id ?? null,
-        })),
-      )
-    } else if (faltante > 0) {
-      await db.from("averias_huevo").insert({
-        lote_huevo_id: linea.lote_huevo_id,
-        referencia_huevo_id: linea.referencia_huevo_id,
-        etapa: "recepcion",
-        tipo_averia: recibida.tipoAveria ?? "roto",
-        cantidad: faltante,
-        orden_cargue_id: ordenId,
-        usuario_id: usuario?.id ?? null,
-      })
-    }
   }
 
   const tarifa = await obtenerTarifaVigente()

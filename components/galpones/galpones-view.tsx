@@ -61,6 +61,7 @@ export function GalponesView() {
   }, [galpones, busqueda])
 
   const activos = galpones.filter((g) => g.activo).length
+  const inactivos = galpones.length - activos
   const capacidadTotal = galpones.reduce((acc, g) => acc + (g.capacidad ?? 0), 0)
 
   function limpiarFormulario() {
@@ -133,6 +134,7 @@ export function GalponesView() {
       <PageHeader titulo="Galpones" subtitulo="Crea y administra los galpones de la granja">
         <StatChip icono={Warehouse} label="Galpones" valor={galpones.length} />
         <StatChip icono={Power} label="Activos" valor={activos} />
+        <StatChip icono={Power} label="Inactivos" valor={inactivos} />
         <StatChip icono={Gauge} label="Capacidad total" valor={capacidadTotal.toLocaleString("es-CO")} />
         <Button asChild variant="outline" size="sm" className="gap-2">
           <Link href="/aves">

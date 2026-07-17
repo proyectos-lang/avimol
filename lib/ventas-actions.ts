@@ -187,13 +187,14 @@ export interface VentaDirecta {
   cliente_nombre: string | null
   fecha: string
   total: number | null
+  unidades: number
 }
 
 export async function listarVentasDirectas(): Promise<VentaDirecta[]> {
   const db = getAvimolDb()
   const { data, error } = await db
     .from("ventas_directas")
-    .select("id, codigo, fecha, total, bodegas(nombre), clientes(nombre)")
+    .select("id, codigo, fecha, total, bodegas(nombre), clientes(nombre), ventas_directas_detalle(cantidad)")
     .order("id", { ascending: false })
 
   if (error) {
@@ -208,5 +209,33 @@ export async function listarVentasDirectas(): Promise<VentaDirecta[]> {
     cliente_nombre: fila.clientes?.nombre ?? null,
     fecha: fila.fecha,
     total: fila.total,
+    unidades: (fila.ventas_directas_detalle ?? []).reduce((acc: number, d: any) => acc + d.cantidad, 0),
+  }))
+}
+
+export interface LineaDetalleVenta {
+  referenciaNombre: string
+  cantidad: number
+  precioUnitario: number | null
+  subtotal: number | null
+}
+
+export async function obtenerDetalleVenta(ventaId: number): Promise<LineaDetalleVenta[]> {
+  const db = getAvimolDb()
+  const { data, error } = await db
+    .from("ventas_directas_detalle")
+    .select("cantidad, precio_unitario, subtotal, referencias_huevo(nombre)")
+    .eq("venta_directa_id", ventaId)
+
+  if (error) {
+    console.error("[avimol] Error obteniendo detalle de venta:", error)
+    return []
+  }
+
+  return (data ?? []).map((fila: any) => ({
+    referenciaNombre: fila.referencias_huevo?.nombre ?? "",
+    cantidad: fila.cantidad,
+    precioUnitario: fila.precio_unitario,
+    subtotal: fila.subtotal,
   }))
 }

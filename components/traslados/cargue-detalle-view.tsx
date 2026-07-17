@@ -11,20 +11,34 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { AlertaRebandejar } from "@/components/ui/alerta-rebandejar"
 import { formatearFechaColombia, formatearFechaHoraColombia } from "@/lib/date-utils"
 import {
   obtenerOrdenConDetalle,
-  iniciarCargue,
   obtenerLotesDisponibles,
   agregarLineaCargue,
   quitarLineaCargue,
   confirmarFinCargue,
+  evaluarCierreOrdenCargue,
+  anularOrdenCargue,
   type OrdenCargueCompleta,
   type LoteDisponible,
+  type AccionCierreCargue,
+  type LineaProgresoCargue,
 } from "@/lib/traslados-actions"
 import { confirmarFinDespacho, registrarAveriaDespacho, obtenerDisponibilidadPedido, type DisponibilidadLineaPedido } from "@/lib/pedidos-actions"
-import { listarLlegadasDisponibles, asignarVehiculoAOrden, type LlegadaVehiculo } from "@/lib/vehiculos-actions"
+import { listarLlegadasDisponibles, asignarVehiculoAOrden, liberarVehiculoDeOrden, type LlegadaVehiculo } from "@/lib/vehiculos-actions"
 import type { TipoAveria } from "@/lib/recoleccion-actions"
 
 export function CargueDetalleView({ ordenId }: { ordenId: number }) {
@@ -47,6 +61,10 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
   const [tipoAveriaDespacho, setTipoAveriaDespacho] = useState<TipoAveria>("roto")
   const [cantidadAveriaDespacho, setCantidadAveriaDespacho] = useState("")
   const [averiaGuardada, setAveriaGuardada] = useState(false)
+
+  const [dialogoCierreAbierto, setDialogoCierreAbierto] = useState(false)
+  const [progresoCierre, setProgresoCierre] = useState<{ completo: boolean; lineas: LineaProgresoCargue[] } | null>(null)
+  const [dialogoAnularAbierto, setDialogoAnularAbierto] = useState(false)
 
   async function cargar() {
     setCargando(true)
@@ -92,10 +110,16 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
     cargar()
   }
 
-  async function onIniciarCargue() {
+  async function onLiberarVehiculo() {
+    setError(null)
     setProcesando(true)
-    await iniciarCargue(ordenId)
+    const resultado = await liberarVehiculoDeOrden(ordenId)
     setProcesando(false)
+    if (!resultado.success) {
+      setError(resultado.message ?? "Error al liberar el vehículo")
+      return
+    }
+    setLlegadaId("")
     cargar()
   }
 
@@ -148,16 +172,43 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
     )
   })()
 
-  async function onConfirmarFinCargue() {
+  async function onConfirmarConAccion(accion: AccionCierreCargue) {
     setProcesando(true)
     setError(null)
-    const resultado = esDespacho ? await confirmarFinDespacho(ordenId) : await confirmarFinCargue(ordenId)
+    const resultado = esDespacho ? await confirmarFinDespacho(ordenId, accion) : await confirmarFinCargue(ordenId, accion)
     setProcesando(false)
+    setDialogoCierreAbierto(false)
     if (!resultado.success) {
       setError(resultado.message ?? "Error al finalizar")
       return
     }
     router.push(esDespacho ? "/despachos" : "/cargue")
+  }
+
+  async function onFinalizarClick() {
+    setError(null)
+    const progreso = await evaluarCierreOrdenCargue(ordenId)
+    if (!progreso || progreso.completo) {
+      await onConfirmarConAccion("cerrar")
+      return
+    }
+    setProgresoCierre(progreso)
+    setDialogoCierreAbierto(true)
+  }
+
+  async function onAnular() {
+    setProcesando(true)
+    setError(null)
+    const resultado = await anularOrdenCargue(ordenId)
+    setProcesando(false)
+    setDialogoAnularAbierto(false)
+    if (!resultado.success) {
+      setError(resultado.message ?? "Error al anular la orden")
+      return
+    }
+    if (orden!.solicitud) router.push(`/traslados/${orden!.solicitud.id}`)
+    else if (orden!.pedido) router.push(`/pedidos/${orden!.pedido.id}`)
+    else router.push(esDespacho ? "/despachos" : "/cargue")
   }
 
   async function onRegistrarAveria() {
@@ -183,10 +234,10 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
     setAveriaGuardada(true)
   }
 
-  const puedeRegistrarLlegada = !orden.hora_llegada_vehiculo
-  const puedeIniciarCargue = orden.hora_llegada_vehiculo && !orden.hora_inicio_cargue
-  const puedeCargar = !!orden.hora_inicio_cargue && !orden.hora_fin_cargue
+  const tieneVehiculo = !!orden.hora_llegada_vehiculo
   const yaFinalizado = !!orden.hora_fin_cargue
+  const puedeEditarPicking = !yaFinalizado
+  const puedeFinalizar = orden.detalle.length > 0 && tieneVehiculo && !yaFinalizado
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -284,10 +335,10 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
         </Card>
       )}
 
-      {puedeRegistrarLlegada && (
+      {!tieneVehiculo && !yaFinalizado && (
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle className="text-base">Llegada del vehículo</CardTitle>
+            <CardTitle className="text-base">Vehículo</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {llegadasDisponibles.length === 0 ? (
@@ -322,27 +373,21 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
         </Card>
       )}
 
-      {orden.hora_llegada_vehiculo && (
-        <p className="mb-4 text-sm text-muted-foreground">
-          Vehículo {orden.placa_vehiculo} ({orden.conductor}) llegó a las{" "}
-          {formatearFechaHoraColombia(orden.hora_llegada_vehiculo)}
-        </p>
+      {tieneVehiculo && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3">
+          <p className="text-sm text-muted-foreground">
+            Vehículo {orden.placa_vehiculo} ({orden.conductor}) llegó a las{" "}
+            {formatearFechaHoraColombia(orden.hora_llegada_vehiculo!)}
+          </p>
+          {!yaFinalizado && (
+            <Button variant="outline" size="sm" onClick={onLiberarVehiculo} disabled={procesando}>
+              Liberar vehículo
+            </Button>
+          )}
+        </div>
       )}
 
-      {puedeIniciarCargue && (
-        <Button size="lg" className="mb-4 w-full" onClick={onIniciarCargue} disabled={procesando}>
-          Iniciar cargue
-        </Button>
-      )}
-
-      {orden.hora_inicio_cargue && (
-        <p className="mb-4 text-sm text-muted-foreground">
-          Cargue iniciado: {formatearFechaHoraColombia(orden.hora_inicio_cargue)}
-          {orden.hora_fin_cargue && <> · Finalizado: {formatearFechaHoraColombia(orden.hora_fin_cargue)}</>}
-        </p>
-      )}
-
-      {puedeCargar && (
+      {puedeEditarPicking && (
         <Card className="mb-4">
           <CardHeader>
             <CardTitle className="text-base">Agregar lote al cargue</CardTitle>
@@ -419,7 +464,7 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
                   <TableHead>Edad</TableHead>
                   <TableHead>Referencia</TableHead>
                   <TableHead>Cantidad</TableHead>
-                  {puedeCargar && <TableHead className="text-right">Quitar</TableHead>}
+                  {puedeEditarPicking && <TableHead className="text-right">Quitar</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -434,7 +479,7 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
                     </TableCell>
                     <TableCell>{d.referencia_nombre}</TableCell>
                     <TableCell>{d.cantidad_cargada.toLocaleString("es-CO")}</TableCell>
-                    {puedeCargar && (
+                    {puedeEditarPicking && (
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => onQuitarLinea(d.id)}>
                           <Trash2 className="h-4 w-4" />
@@ -495,10 +540,27 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
 
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
-      {puedeCargar && (
-        <Button size="lg" className="h-14 w-full text-base" onClick={onConfirmarFinCargue} disabled={procesando}>
-          {esDespacho ? "Finalizar despacho" : "Finalizar cargue"}
-        </Button>
+      {!yaFinalizado && (
+        <>
+          <Button
+            variant="outline"
+            className="mb-2 w-full text-destructive hover:text-destructive"
+            onClick={() => setDialogoAnularAbierto(true)}
+            disabled={procesando}
+          >
+            Anular orden
+          </Button>
+          <Button size="lg" className="h-14 w-full text-base" onClick={onFinalizarClick} disabled={procesando || !puedeFinalizar}>
+            {esDespacho ? "Finalizar despacho" : "Finalizar cargue"}
+          </Button>
+          {!puedeFinalizar && (
+            <p className="mt-2 text-center text-xs text-muted-foreground">
+              {orden.detalle.length === 0
+                ? "Agrega al menos una línea para poder finalizar."
+                : "Asigna un vehículo para poder finalizar."}
+            </p>
+          )}
+        </>
       )}
 
       {yaFinalizado && (
@@ -516,6 +578,59 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
           )}
         </p>
       )}
+
+      <Dialog open={dialogoCierreAbierto} onOpenChange={setDialogoCierreAbierto}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Este {esDespacho ? "despacho" : "cargue"} no cubre todo lo solicitado</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5 text-sm">
+              {progresoCierre?.lineas
+                .filter((l) => l.cantidadPendiente > 0)
+                .map((l) => (
+                  <div key={l.referenciaId} className="flex items-center justify-between rounded-md border border-border p-2">
+                    <span>{l.referenciaNombre}</span>
+                    <span className="text-muted-foreground">
+                      {l.cantidadCargadaTotal.toLocaleString("es-CO")} de {l.cantidadSolicitada.toLocaleString("es-CO")} —
+                      faltan {l.cantidadPendiente.toLocaleString("es-CO")}
+                    </span>
+                  </div>
+                ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Puedes cerrar definitivamente con lo cargado, o dejarlo pendiente para generar otra orden de cargue por
+              el remanente (posiblemente con otro vehículo) desde el detalle de la {esDespacho ? "pedido" : "solicitud"}.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button variant="outline" className="flex-1" onClick={() => onConfirmarConAccion("cerrar")} disabled={procesando}>
+                Cerrar con lo cargado
+              </Button>
+              <Button className="flex-1" onClick={() => onConfirmarConAccion("mantener_pendiente")} disabled={procesando}>
+                Mantener pendiente
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={dialogoAnularAbierto} onOpenChange={setDialogoAnularAbierto}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Anular esta orden?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se borrarán las líneas cargadas y se liberará el vehículo asignado, si tiene. Esta acción no se puede
+              deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={procesando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={onAnular} disabled={procesando}>
+              Anular orden
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

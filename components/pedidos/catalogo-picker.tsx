@@ -127,25 +127,25 @@ export function CatalogoPicker({
                   )}
                 </p>
               </div>
-              <div className="flex gap-1">
-                <div className="flex-1">
-                  <Label className="sr-only">Cantidad</Label>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Cantidad</Label>
                   <Input
                     type="number"
-                    placeholder="Cant."
-                    className="h-8 text-sm"
+                    placeholder="0"
+                    className="h-9 text-sm"
                     value={cantidad}
                     disabled={sinStock}
                     onChange={(e) => onCantidadChange?.(p.id, e.target.value)}
                   />
                 </div>
                 {mostrarPrecio && (
-                  <div className="flex-1">
-                    <Label className="sr-only">Precio</Label>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Precio</Label>
                     <Input
                       type="number"
-                      placeholder="$ (opc.)"
-                      className="h-8 text-sm"
+                      placeholder="Opcional"
+                      className="h-9 text-sm"
                       value={precios?.[p.id] ?? ""}
                       disabled={sinStock}
                       onChange={(e) => onPrecioChange?.(p.id, e.target.value)}

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { RefreshCw, Store } from "lucide-react"
+import { Eye, RefreshCw, Store } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -13,6 +13,7 @@ import { FormCard } from "@/components/ui/form-card"
 import { StatChip } from "@/components/ui/stat-chip"
 import { EmptyState } from "@/components/ui/empty-state"
 import { SearchInput } from "@/components/ui/search-input"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { CatalogoPicker } from "@/components/pedidos/catalogo-picker"
 import { formatearFechaHoraColombia } from "@/lib/date-utils"
 import { listarBodegas, type Bodega } from "@/lib/bodegas-actions"
@@ -21,9 +22,15 @@ import {
   obtenerInventarioDisponiblePorBodega,
   crearVentaDirecta,
   listarVentasDirectas,
+  obtenerDetalleVenta,
   type InventarioDisponibleReferencia,
   type VentaDirecta,
+  type LineaDetalleVenta,
 } from "@/lib/ventas-actions"
+
+function formatearMoneda(valor: number): string {
+  return `$${valor.toLocaleString("es-CO")}`
+}
 
 export function VentasView() {
   const [bodegas, setBodegas] = useState<Bodega[]>([])
@@ -39,6 +46,10 @@ export function VentasView() {
   const [precios, setPrecios] = useState<Record<number, string>>({})
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [ventaDetalleId, setVentaDetalleId] = useState<number | null>(null)
+  const [detalleVenta, setDetalleVenta] = useState<LineaDetalleVenta[]>([])
+  const [cargandoDetalle, setCargandoDetalle] = useState(false)
 
   async function cargarDatosBase() {
     setCargando(true)
@@ -75,6 +86,13 @@ export function VentasView() {
   }, [ventas, busqueda])
 
   const ingresosTotales = ventas.reduce((acc, v) => acc + (v.total ?? 0), 0)
+
+  async function abrirDetalle(ventaId: number) {
+    setVentaDetalleId(ventaId)
+    setCargandoDetalle(true)
+    setDetalleVenta(await obtenerDetalleVenta(ventaId))
+    setCargandoDetalle(false)
+  }
 
   async function onRegistrarVenta() {
     setError(null)
@@ -237,7 +255,9 @@ export function VentasView() {
                   <TableHead>Bodega</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Fecha</TableHead>
+                  <TableHead className="text-right">Unidades</TableHead>
                   <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Ver</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -247,8 +267,14 @@ export function VentasView() {
                     <TableCell>{v.bodega_nombre}</TableCell>
                     <TableCell>{v.cliente_nombre ?? "Mostrador"}</TableCell>
                     <TableCell>{formatearFechaHoraColombia(v.fecha)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{v.unidades.toLocaleString("es-CO")}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {v.total != null ? `$${v.total.toLocaleString("es-CO")}` : "—"}
+                      {v.total != null ? formatearMoneda(v.total) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" onClick={() => abrirDetalle(v.id)} title="Ver detalle">
+                        <Eye className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -257,6 +283,53 @@ export function VentasView() {
           )}
         </div>
       </div>
+
+      <Dialog open={ventaDetalleId != null} onOpenChange={(v) => !v && setVentaDetalleId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Detalle de venta {ventasFiltradas.find((v) => v.id === ventaDetalleId)?.codigo}</DialogTitle>
+          </DialogHeader>
+          {cargandoDetalle ? (
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Referencia</TableHead>
+                    <TableHead className="text-right">Cantidad</TableHead>
+                    <TableHead className="text-right">Precio</TableHead>
+                    <TableHead className="text-right">Subtotal</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {detalleVenta.map((l, i) => (
+                    <TableRow key={i}>
+                      <TableCell>{l.referenciaNombre}</TableCell>
+                      <TableCell className="text-right tabular-nums">{l.cantidad.toLocaleString("es-CO")}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {l.precioUnitario != null ? formatearMoneda(l.precioUnitario) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {l.subtotal != null ? formatearMoneda(l.subtotal) : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="mt-2 flex justify-between border-t border-border pt-2 text-sm font-bold">
+                <span>Total</span>
+                <span className="tabular-nums">
+                  {formatearMoneda(detalleVenta.reduce((acc, l) => acc + (l.subtotal ?? 0), 0))}
+                </span>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

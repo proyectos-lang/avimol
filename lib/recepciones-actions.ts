@@ -1,6 +1,8 @@
 "use server"
 
 import { getAvimolDb } from "@/lib/supabase-avimol"
+import { obtenerUsuarioActual } from "@/lib/auth/actions"
+import { fechaHoraColombiaISO } from "@/lib/date-utils"
 
 export interface RecepcionResumen {
   id: number
@@ -114,4 +116,192 @@ export async function listarDashboardRecepciones(): Promise<DashboardRecepciones
     totalYemas: recepciones.reduce((acc, r) => acc + r.totalYemas, 0),
     totalBolsas: recepciones.reduce((acc, r) => acc + r.totalBolsas, 0),
   }
+}
+
+export interface LineaRecepcionPendiente {
+  detalleId: number
+  loteHuevoCodigo: string
+  referenciaId: number
+  referenciaNombre: string
+  cantidadRecibida: number
+}
+
+export interface RecepcionPendienteClasificar {
+  ordenId: number
+  codigo: string
+  bodegaId: number
+  bodegaNombre: string
+  placaVehiculo: string | null
+  horaFinDescargue: string
+  lineas: LineaRecepcionPendiente[]
+}
+
+// Recepciones ya descargadas (cantidad_recibida confirmada) pero cuyo
+// desglose bueno/roto/picado/partido todavía no se ha declarado — el
+// inventario de esas líneas sigue sin acreditarse hasta que se procesen
+// aquí (ver confirmarClasificacionRecepcion).
+export async function listarRecepcionesPendientesClasificar(): Promise<RecepcionPendienteClasificar[]> {
+  const db = getAvimolDb()
+
+  const { data: ordenes, error } = await db
+    .from("ordenes_cargue")
+    .select("id, codigo, bodega_id, placa_vehiculo, hora_fin_descargue, bodegas(nombre)")
+    .eq("tipo_operacion", "descargue_traslado")
+    .not("hora_fin_descargue", "is", null)
+    .is("hora_clasificacion_averia", null)
+    .order("hora_fin_descargue", { ascending: true })
+
+  if (error) {
+    console.error("[avimol] Error listando recepciones pendientes de clasificar:", error)
+    return []
+  }
+  if (!ordenes || ordenes.length === 0) return []
+
+  const ordenIds = ordenes.map((o) => o.id)
+  const { data: detalle } = await db
+    .from("ordenes_cargue_detalle")
+    .select("id, orden_cargue_id, cantidad_recibida, referencia_huevo_id, referencias_huevo(nombre), lotes_huevo(codigo)")
+    .in("orden_cargue_id", ordenIds)
+
+  const porOrden = new Map<number, LineaRecepcionPendiente[]>()
+  for (const d of (detalle ?? []) as any[]) {
+    const lineas = porOrden.get(d.orden_cargue_id) ?? []
+    lineas.push({
+      detalleId: d.id,
+      loteHuevoCodigo: d.lotes_huevo?.codigo ?? "",
+      referenciaId: d.referencia_huevo_id,
+      referenciaNombre: d.referencias_huevo?.nombre ?? "",
+      cantidadRecibida: d.cantidad_recibida ?? 0,
+    })
+    porOrden.set(d.orden_cargue_id, lineas)
+  }
+
+  return ordenes.map((o: any) => ({
+    ordenId: o.id,
+    codigo: o.codigo,
+    bodegaId: o.bodega_id,
+    bodegaNombre: o.bodegas?.nombre ?? "",
+    placaVehiculo: o.placa_vehiculo,
+    horaFinDescargue: o.hora_fin_descargue,
+    lineas: porOrden.get(o.id) ?? [],
+  }))
+}
+
+export interface LineaClasificacionAveria {
+  detalleId: number
+  buenos: number
+  rotos: number
+  picados: number
+  partidos: number
+}
+
+// Reparte lo recibido en cada línea entre bueno/roto/picado/partido: los
+// buenos entran a inventario_huevo (misma lógica que antes vivía en
+// confirmarFinDescargue), y el resto queda como averías etapa='recepcion'
+// visibles en /averias. Marca la orden como clasificada al terminar.
+export async function confirmarClasificacionRecepcion(
+  ordenId: number,
+  lineas: LineaClasificacionAveria[],
+): Promise<{ success: boolean; message?: string }> {
+  const db = getAvimolDb()
+  const usuario = await obtenerUsuarioActual()
+
+  const { data: orden, error: errorOrden } = await db
+    .from("ordenes_cargue")
+    .select("id, bodega_id, hora_fin_descargue, hora_clasificacion_averia")
+    .eq("id", ordenId)
+    .maybeSingle()
+
+  if (errorOrden || !orden) return { success: false, message: "Orden no encontrada" }
+  if (!orden.hora_fin_descargue) return { success: false, message: "Esta recepción todavía no ha sido descargada" }
+  if (orden.hora_clasificacion_averia) return { success: false, message: "Esta recepción ya fue clasificada" }
+
+  const { data: detalleData, error: errorDetalle } = await db
+    .from("ordenes_cargue_detalle")
+    .select("id, lote_huevo_id, referencia_huevo_id, cantidad_recibida")
+    .eq("orden_cargue_id", ordenId)
+
+  if (errorDetalle || !detalleData) return { success: false, message: "No se pudo leer el detalle de la orden" }
+
+  const detallePorId = new Map(detalleData.map((d: any) => [d.id, d]))
+
+  for (const l of lineas) {
+    const d = detallePorId.get(l.detalleId)
+    if (!d) return { success: false, message: "Línea de recepción no encontrada" }
+    const suma = l.buenos + l.rotos + l.picados + l.partidos
+    if (suma !== (d.cantidad_recibida ?? 0)) {
+      return {
+        success: false,
+        message: `La clasificación de una línea (${suma}) no coincide con lo recibido (${d.cantidad_recibida ?? 0})`,
+      }
+    }
+  }
+
+  for (const l of lineas) {
+    const d = detallePorId.get(l.detalleId)!
+
+    if (l.buenos > 0) {
+      const { data: existente } = await db
+        .from("inventario_huevo")
+        .select("id, cantidad_disponible")
+        .eq("bodega_id", orden.bodega_id)
+        .eq("lote_huevo_id", d.lote_huevo_id)
+        .eq("referencia_huevo_id", d.referencia_huevo_id)
+        .is("anaquel_id", null)
+        .maybeSingle()
+
+      if (existente) {
+        await db
+          .from("inventario_huevo")
+          .update({
+            cantidad_disponible: existente.cantidad_disponible + l.buenos,
+            actualizado_en: fechaHoraColombiaISO(),
+          })
+          .eq("id", existente.id)
+      } else {
+        await db.from("inventario_huevo").insert({
+          bodega_id: orden.bodega_id,
+          lote_huevo_id: d.lote_huevo_id,
+          referencia_huevo_id: d.referencia_huevo_id,
+          anaquel_id: null,
+          cantidad_disponible: l.buenos,
+        })
+      }
+
+      await db.from("movimientos_inventario_huevo").insert({
+        bodega_id: orden.bodega_id,
+        lote_huevo_id: d.lote_huevo_id,
+        referencia_huevo_id: d.referencia_huevo_id,
+        anaquel_id: null,
+        tipo_movimiento: "entrada_recepcion_traslado",
+        cantidad: l.buenos,
+        orden_cargue_id: ordenId,
+        usuario_id: usuario?.id ?? null,
+        creado_en: fechaHoraColombiaISO(),
+      })
+    }
+
+    const averiasLinea: { tipo_averia: string; cantidad: number }[] = []
+    if (l.rotos > 0) averiasLinea.push({ tipo_averia: "roto", cantidad: l.rotos })
+    if (l.picados > 0) averiasLinea.push({ tipo_averia: "picado", cantidad: l.picados })
+    if (l.partidos > 0) averiasLinea.push({ tipo_averia: "partido", cantidad: l.partidos })
+
+    if (averiasLinea.length > 0) {
+      await db.from("averias_huevo").insert(
+        averiasLinea.map((a) => ({
+          lote_huevo_id: d.lote_huevo_id,
+          referencia_huevo_id: d.referencia_huevo_id,
+          etapa: "recepcion",
+          tipo_averia: a.tipo_averia,
+          cantidad: a.cantidad,
+          orden_cargue_id: ordenId,
+          usuario_id: usuario?.id ?? null,
+        })),
+      )
+    }
+  }
+
+  await db.from("ordenes_cargue").update({ hora_clasificacion_averia: fechaHoraColombiaISO() }).eq("id", ordenId)
+
+  return { success: true }
 }

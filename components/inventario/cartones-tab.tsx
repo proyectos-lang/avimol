@@ -18,12 +18,20 @@ import {
   registrarIngresoCarton,
   obtenerCostoCartonVigente,
   listarConsumoCartones,
+  listarMovimientosCartones,
   type InventarioCartonFila,
   type ConsumoCartonClasificacion,
+  type MovimientoCarton,
 } from "@/lib/cartones-actions"
 
 function formatearMoneda(valor: number): string {
   return valor.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })
+}
+
+const TIPO_MOVIMIENTO_LABEL: Record<string, string> = {
+  entrada_manual: "Entrada manual",
+  salida_clasificacion: "Salida por clasificación",
+  ajuste: "Ajuste",
 }
 
 export function CartonesTab() {
@@ -32,6 +40,7 @@ export function CartonesTab() {
   const [inventario, setInventario] = useState<InventarioCartonFila[]>([])
   const [costoVigente, setCostoVigente] = useState<number | null>(null)
   const [consumo, setConsumo] = useState<ConsumoCartonClasificacion[]>([])
+  const [movimientos, setMovimientos] = useState<MovimientoCarton[]>([])
 
   const [bodegaIngresoId, setBodegaIngresoId] = useState("")
   const [cantidadIngreso, setCantidadIngreso] = useState("")
@@ -42,16 +51,18 @@ export function CartonesTab() {
 
   async function cargarDatos() {
     const idBodega = bodegaId === "todas" ? null : Number(bodegaId)
-    const [b, inv, costo, cons] = await Promise.all([
+    const [b, inv, costo, cons, movs] = await Promise.all([
       listarBodegasClasificadoras(),
       listarInventarioCartones(idBodega),
       obtenerCostoCartonVigente(),
       listarConsumoCartones(idBodega),
+      listarMovimientosCartones(idBodega),
     ])
     setBodegas(b)
     setInventario(inv)
     setCostoVigente(costo?.valor ?? null)
     setConsumo(cons)
+    setMovimientos(movs)
   }
 
   useEffect(() => {
@@ -155,11 +166,11 @@ export function CartonesTab() {
 
       <div>
         <h2 className="mb-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">
-          Consumo por clasificación — calculado vs. usado
+          Movimientos de cartones — entradas y salidas
         </h2>
-        {consumo.length === 0 ? (
+        {movimientos.length === 0 ? (
           <div className="rounded-lg border border-border bg-card">
-            <EmptyState icono={Layers} titulo="Sin clasificaciones registradas todavía" />
+            <EmptyState icono={Layers} titulo="Sin movimientos de cartones todavía" />
           </div>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
@@ -168,33 +179,35 @@ export function CartonesTab() {
                 <TableRow>
                   <TableHead>Fecha</TableHead>
                   <TableHead>Bodega</TableHead>
-                  <TableHead>Lote</TableHead>
-                  <TableHead className="text-right">Calculados</TableHead>
-                  <TableHead>Extra</TableHead>
-                  <TableHead className="text-right">Total usado</TableHead>
-                  <TableHead className="text-right">Costo</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead className="text-right">Cantidad</TableHead>
+                  <TableHead className="text-right">Costo unitario</TableHead>
+                  <TableHead>Detalle</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {consumo.map((c) => (
-                  <TableRow key={c.codigo}>
-                    <TableCell>{formatearFechaHoraColombia(c.fecha)}</TableCell>
-                    <TableCell>{c.bodega_nombre}</TableCell>
-                    <TableCell className="font-medium">{c.lote_huevo_codigo}</TableCell>
-                    <TableCell className="text-right tabular-nums">{c.cartones_calculados}</TableCell>
-                    <TableCell>
-                      {c.detalle_extra.length === 0
-                        ? "—"
-                        : c.detalle_extra.map((d, i) => (
-                            <div key={i} className="text-xs text-muted-foreground">
-                              {d.motivo}: {d.cantidad}
-                              {d.observacion && ` — ${d.observacion}`}
-                            </div>
-                          ))}
+                {movimientos.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell>{formatearFechaHoraColombia(m.creadoEn)}</TableCell>
+                    <TableCell>{m.bodegaNombre}</TableCell>
+                    <TableCell>{TIPO_MOVIMIENTO_LABEL[m.tipoMovimiento] ?? m.tipoMovimiento}</TableCell>
+                    <TableCell
+                      className={`text-right font-semibold tabular-nums ${m.cantidad > 0 ? "text-green-600" : "text-destructive"}`}
+                    >
+                      {m.cantidad > 0 ? "+" : ""}
+                      {m.cantidad.toLocaleString("es-CO")}
                     </TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{c.total}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {c.costo_total_cartones != null ? formatearMoneda(c.costo_total_cartones) : "—"}
+                      {m.costoUnitario != null ? formatearMoneda(m.costoUnitario) : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {m.clasificacionCodigo ? (
+                        <>
+                          {m.clasificacionCodigo} · Calculados {m.cartonesCalculados} · Extra {m.cartonesExtra}
+                        </>
+                      ) : (
+                        m.observaciones ?? "—"
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

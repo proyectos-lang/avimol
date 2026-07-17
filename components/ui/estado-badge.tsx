@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils"
 const ESTILOS: Record<string, string> = {
   cerrado: "border-transparent bg-green-600 text-white hover:bg-green-600",
   recibido: "border-transparent bg-green-600 text-white hover:bg-green-600",
-  despachado: "border-transparent bg-green-600 text-white hover:bg-green-600",
   activo: "border-transparent bg-green-600 text-white hover:bg-green-600",
   activa: "border-transparent bg-green-600 text-white hover:bg-green-600",
   disponible: "border-transparent bg-green-600 text-white hover:bg-green-600",
@@ -17,6 +16,12 @@ const ESTILOS: Record<string, string> = {
   en_picking: "border-transparent bg-sky-100 text-sky-700 hover:bg-sky-100",
   en_uso: "border-transparent bg-sky-100 text-sky-700 hover:bg-sky-100",
   pendiente: "border-transparent bg-amber-100 text-amber-700 hover:bg-amber-100",
+  // "despachado"/"cargado_parcial": cubierto parcialmente, todavía admite
+  // otra orden de cargue por el remanente — no es un estado terminal
+  // positivo, por eso comparte el ámbar de "necesita seguimiento" y no el
+  // verde de cerrado/recibido.
+  despachado: "border-transparent bg-amber-100 text-amber-700 hover:bg-amber-100",
+  cargado_parcial: "border-transparent bg-amber-100 text-amber-700 hover:bg-amber-100",
   inactivo: "border-transparent bg-muted text-muted-foreground",
   inactiva: "border-transparent bg-muted text-muted-foreground",
   anulado: "border-transparent bg-destructive text-white hover:bg-destructive",

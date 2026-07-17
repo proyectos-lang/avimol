@@ -122,3 +122,28 @@ export async function asignarVehiculoAOrden(
 
   return { success: true }
 }
+
+// Libera el vehículo de una orden que todavía no ha finalizado su
+// cargue — para el caso donde se asignó por error, o la orden termina
+// sin producto para cargar y el vehículo quedaría atascado.
+export async function liberarVehiculoDeOrden(ordenId: number): Promise<{ success: boolean; message?: string }> {
+  const db = getAvimolDb()
+
+  const { data: orden, error: errorOrden } = await db
+    .from("ordenes_cargue")
+    .select("hora_fin_cargue")
+    .eq("id", ordenId)
+    .maybeSingle()
+
+  if (errorOrden || !orden) return { success: false, message: "Orden no encontrada" }
+  if (orden.hora_fin_cargue) return { success: false, message: "La orden ya fue finalizada" }
+
+  await db.from("llegadas_vehiculo").update({ orden_cargue_id: null }).eq("orden_cargue_id", ordenId)
+
+  await db
+    .from("ordenes_cargue")
+    .update({ placa_vehiculo: null, conductor: null, hora_llegada_vehiculo: null })
+    .eq("id", ordenId)
+
+  return { success: true }
+}

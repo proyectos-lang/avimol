@@ -364,3 +364,140 @@ export async function obtenerProduccionPorGalpon(): Promise<ProduccionGalpon[]> 
     }))
     .sort((a, b) => b.cantidadTotal - a.cantidadTotal)
 }
+
+export interface IndicadorGalpon {
+  galponId: number
+  galponCodigo: string
+  galponNombre: string
+  capacidad: number | null
+  utilizada: number
+  porcentajeOcupacion: number
+  mortalidad: number
+  tasaMortalidad: number
+  sacrificio: number
+  tasaSacrificio: number
+  edadPromedioSemanas: number
+}
+
+export interface IndicadoresAves {
+  porGalpon: IndicadorGalpon[]
+  capacidadTotal: number
+  utilizadaTotal: number
+  porcentajeOcupacionTotal: number
+  mortalidadTotal: number
+  tasaMortalidadTotal: number
+  sacrificioTotal: number
+  tasaSacrificioTotal: number
+  edadPromedioTotal: number
+}
+
+const INDICADORES_AVES_VACIO: IndicadoresAves = {
+  porGalpon: [],
+  capacidadTotal: 0,
+  utilizadaTotal: 0,
+  porcentajeOcupacionTotal: 0,
+  mortalidadTotal: 0,
+  tasaMortalidadTotal: 0,
+  sacrificioTotal: 0,
+  tasaSacrificioTotal: 0,
+  edadPromedioTotal: 0,
+}
+
+// Capacidad/ocupación y edad son una foto del momento actual (no tiene
+// sentido filtrarlas por fecha); mortalidad y sacrificio sí se filtran
+// por el rango dado, comparadas contra el total histórico ingresado a
+// cada galpón (lotes_aves.cantidad_ingreso, sin importar su estado
+// actual) como base de la tasa.
+export async function obtenerIndicadoresAves(fechaInicio?: string, fechaFin?: string): Promise<IndicadoresAves> {
+  const db = getAvimolDb()
+
+  const { data: galpones, error: errorGalpones } = await db
+    .from("galpones")
+    .select("id, codigo, nombre, capacidad")
+    .order("codigo")
+
+  if (errorGalpones) {
+    console.error("[avimol] Error obteniendo galpones para indicadores:", errorGalpones)
+    return INDICADORES_AVES_VACIO
+  }
+
+  const { data: lotes } = await db
+    .from("v_lotes_aves_edad")
+    .select("galpon_id, cantidad_actual, cantidad_ingreso, edad_actual_semanas, estado")
+
+  const utilizadaPorGalpon = new Map<number, number>()
+  const ingresoPorGalpon = new Map<number, number>()
+  const edadPonderadaPorGalpon = new Map<number, number>()
+
+  for (const l of (lotes ?? []) as any[]) {
+    ingresoPorGalpon.set(l.galpon_id, (ingresoPorGalpon.get(l.galpon_id) ?? 0) + l.cantidad_ingreso)
+    if (l.estado === "activo") {
+      utilizadaPorGalpon.set(l.galpon_id, (utilizadaPorGalpon.get(l.galpon_id) ?? 0) + l.cantidad_actual)
+      edadPonderadaPorGalpon.set(
+        l.galpon_id,
+        (edadPonderadaPorGalpon.get(l.galpon_id) ?? 0) + l.edad_actual_semanas * l.cantidad_actual,
+      )
+    }
+  }
+
+  let queryMovimientos = db
+    .from("movimientos_aves")
+    .select("galpon_origen_id, tipo_movimiento, cantidad, fecha")
+    .in("tipo_movimiento", ["mortalidad", "sacrificio"])
+
+  if (fechaInicio) queryMovimientos = queryMovimientos.gte("fecha", fechaInicio)
+  if (fechaFin) queryMovimientos = queryMovimientos.lte("fecha", fechaFin + "T23:59:59")
+
+  const { data: movimientos } = await queryMovimientos
+
+  const mortalidadPorGalpon = new Map<number, number>()
+  const sacrificioPorGalpon = new Map<number, number>()
+  for (const m of (movimientos ?? []) as any[]) {
+    if (!m.galpon_origen_id) continue
+    if (m.tipo_movimiento === "mortalidad") {
+      mortalidadPorGalpon.set(m.galpon_origen_id, (mortalidadPorGalpon.get(m.galpon_origen_id) ?? 0) + m.cantidad)
+    } else {
+      sacrificioPorGalpon.set(m.galpon_origen_id, (sacrificioPorGalpon.get(m.galpon_origen_id) ?? 0) + m.cantidad)
+    }
+  }
+
+  const porGalpon: IndicadorGalpon[] = (galpones ?? []).map((g) => {
+    const utilizada = utilizadaPorGalpon.get(g.id) ?? 0
+    const edadPonderada = edadPonderadaPorGalpon.get(g.id) ?? 0
+    const ingreso = ingresoPorGalpon.get(g.id) ?? 0
+    const mortalidad = mortalidadPorGalpon.get(g.id) ?? 0
+    const sacrificio = sacrificioPorGalpon.get(g.id) ?? 0
+    return {
+      galponId: g.id,
+      galponCodigo: g.codigo,
+      galponNombre: g.nombre,
+      capacidad: g.capacidad,
+      utilizada,
+      porcentajeOcupacion: g.capacidad ? Math.round((utilizada / g.capacidad) * 1000) / 10 : 0,
+      mortalidad,
+      tasaMortalidad: ingreso > 0 ? Math.round((mortalidad / ingreso) * 1000) / 10 : 0,
+      sacrificio,
+      tasaSacrificio: ingreso > 0 ? Math.round((sacrificio / ingreso) * 1000) / 10 : 0,
+      edadPromedioSemanas: utilizada > 0 ? Math.round((edadPonderada / utilizada) * 10) / 10 : 0,
+    }
+  })
+
+  const capacidadTotal = porGalpon.reduce((acc, g) => acc + (g.capacidad ?? 0), 0)
+  const utilizadaTotal = porGalpon.reduce((acc, g) => acc + g.utilizada, 0)
+  const ingresoTotal = Array.from(ingresoPorGalpon.values()).reduce((acc, v) => acc + v, 0)
+  const mortalidadTotal = porGalpon.reduce((acc, g) => acc + g.mortalidad, 0)
+  const sacrificioTotal = porGalpon.reduce((acc, g) => acc + g.sacrificio, 0)
+  const edadPonderadaTotal = porGalpon.reduce((acc, g) => acc + g.edadPromedioSemanas * g.utilizada, 0)
+
+  return {
+    porGalpon,
+    capacidadTotal,
+    utilizadaTotal,
+    porcentajeOcupacionTotal: capacidadTotal > 0 ? Math.round((utilizadaTotal / capacidadTotal) * 1000) / 10 : 0,
+    mortalidadTotal,
+    tasaMortalidadTotal: ingresoTotal > 0 ? Math.round((mortalidadTotal / ingresoTotal) * 1000) / 10 : 0,
+    sacrificioTotal,
+    tasaSacrificioTotal: ingresoTotal > 0 ? Math.round((sacrificioTotal / ingresoTotal) * 1000) / 10 : 0,
+    edadPromedioTotal: utilizadaTotal > 0 ? Math.round((edadPonderadaTotal / utilizadaTotal) * 10) / 10 : 0,
+  }
+}

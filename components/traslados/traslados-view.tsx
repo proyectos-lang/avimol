@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { PackageMinus, RefreshCw, Truck } from "lucide-react"
+import { Eye, PackageMinus, RefreshCw, Truck } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,13 +27,7 @@ import {
 } from "@/lib/traslados-actions"
 import { listarBodegas, type Bodega } from "@/lib/bodegas-actions"
 import { listarReferenciasHuevo, type ReferenciaHuevo } from "@/lib/recoleccion-actions"
-
-const ESTADO_LABEL: Record<string, string> = {
-  pendiente: "Pendiente",
-  cargado: "Cargado",
-  recibido: "Recibido",
-  anulado: "Anulado",
-}
+import { ESTADO_SOLICITUD_TRASLADO_LABEL as ESTADO_LABEL } from "@/lib/estado-labels"
 
 export function TrasladosView() {
   const [solicitudes, setSolicitudes] = useState<SolicitudTraslado[]>([])
@@ -330,6 +324,7 @@ export function TrasladosView() {
                   <TableHead>Destino</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Creada</TableHead>
+                  <TableHead className="text-right">Ver</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -342,6 +337,13 @@ export function TrasladosView() {
                       <EstadoBadge estado={s.estado} label={ESTADO_LABEL[s.estado] ?? s.estado} />
                     </TableCell>
                     <TableCell>{formatearFechaHoraColombia(s.creado_en)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" asChild title="Ver detalle">
+                        <Link href={`/traslados/${s.id}`}>
+                          <Eye className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

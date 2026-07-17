@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { Send, ShoppingCart, Users, X } from "lucide-react"
+import { Eye, RefreshCw, Send, ShoppingCart, Users, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,13 +12,19 @@ import { Switch } from "@/components/ui/switch"
 import { PageHeader } from "@/components/ui/page-header"
 import { FormCard } from "@/components/ui/form-card"
 import { StatChip } from "@/components/ui/stat-chip"
+import { EstadoBadge } from "@/components/ui/estado-badge"
+import { SearchInput } from "@/components/ui/search-input"
+import { EmptyState } from "@/components/ui/empty-state"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { CatalogoPicker } from "@/components/pedidos/catalogo-picker"
-import { formatearFechaColombia, fechaColombiaHoy } from "@/lib/date-utils"
+import { formatearFechaColombia, formatearFechaHoraColombia, fechaColombiaHoy } from "@/lib/date-utils"
 import { listarPedidos, crearPedido, type Pedido } from "@/lib/pedidos-actions"
 import { listarBodegas, type Bodega } from "@/lib/bodegas-actions"
 import { listarClientes, type Cliente } from "@/lib/clientes-actions"
 import { listarVendedores, type Vendedor } from "@/lib/usuarios-actions"
 import { listarCatalogoReferencias, type ReferenciaCatalogo } from "@/lib/catalogo-actions"
+import { ESTADO_PEDIDO_LABEL } from "@/lib/estado-labels"
 
 function formatearMoneda(valor: number): string {
   return valor.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })
@@ -52,7 +58,11 @@ export function PedidosView() {
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [cargando, setCargando] = useState(true)
+  const [busqueda, setBusqueda] = useState("")
+
   async function cargarDatos() {
+    setCargando(true)
     const [p, b, c, v, r] = await Promise.all([
       listarPedidos(),
       listarBodegas(true),
@@ -65,6 +75,7 @@ export function PedidosView() {
     setClientes(c)
     setVendedores(v)
     setReferencias(r)
+    setCargando(false)
   }
 
   useEffect(() => {
@@ -72,6 +83,12 @@ export function PedidosView() {
   }, [])
 
   const pendientes = pedidos.filter((p) => p.estado === "pendiente").length
+
+  const pedidosFiltrados = useMemo(() => {
+    const q = busqueda.trim().toLowerCase()
+    if (!q) return pedidos
+    return pedidos.filter((p) => `${p.codigo} ${p.cliente_nombre} ${p.bodega_nombre}`.toLowerCase().includes(q))
+  }, [pedidos, busqueda])
 
   // Todo lo que se agregó al carrito desde el catálogo, aunque la
   // cantidad quede en 0 temporalmente mientras se edita — solo
@@ -402,6 +419,75 @@ export function PedidosView() {
             </Button>
           </div>
         </FormCard>
+      </div>
+
+      <div className="mt-6 rounded-xl border border-border bg-card">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
+          <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
+            Historial de pedidos ({pedidosFiltrados.length})
+          </h2>
+          <div className="flex items-center gap-2">
+            <SearchInput
+              value={busqueda}
+              onChange={setBusqueda}
+              placeholder="Buscar por código, cliente o bodega..."
+              className="w-64"
+            />
+            <Button variant="outline" size="icon" onClick={cargarDatos} title="Actualizar">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {cargando ? (
+          <div className="flex flex-col gap-2 p-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : pedidosFiltrados.length === 0 ? (
+          <EmptyState
+            icono={ShoppingCart}
+            titulo={busqueda ? "Sin resultados" : "Todavía no hay pedidos"}
+            descripcion={busqueda ? "Ningún pedido coincide con la búsqueda." : "Crea el primer pedido con el catálogo de arriba."}
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Código</TableHead>
+                <TableHead>Cliente</TableHead>
+                <TableHead>Bodega</TableHead>
+                <TableHead>Fecha</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right">Ver</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pedidosFiltrados.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-medium">{p.codigo}</TableCell>
+                  <TableCell>{p.cliente_nombre}</TableCell>
+                  <TableCell>{p.bodega_nombre}</TableCell>
+                  <TableCell>{formatearFechaHoraColombia(p.fecha_pedido)}</TableCell>
+                  <TableCell>
+                    <EstadoBadge estado={p.estado} label={ESTADO_PEDIDO_LABEL[p.estado] ?? p.estado} />
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {p.total != null ? formatearMoneda(p.total) : "—"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" asChild title="Ver detalle">
+                      <Link href={`/pedidos/${p.id}`}>
+                        <Eye className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </div>
     </div>
   )

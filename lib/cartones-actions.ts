@@ -156,6 +156,56 @@ const MOTIVO_LABEL: Record<string, string> = {
   averiados: "Averiados",
 }
 
+export interface MovimientoCarton {
+  id: number
+  bodegaNombre: string
+  tipoMovimiento: string
+  cantidad: number
+  costoUnitario: number | null
+  observaciones: string | null
+  creadoEn: string
+  clasificacionCodigo: string | null
+  cartonesCalculados: number | null
+  cartonesExtra: number | null
+}
+
+// Kardex completo de cartones (entradas manuales + salidas por
+// clasificación + ajustes) filtrado por bodega — a diferencia de
+// listarConsumoCartones, que solo mira las salidas derivadas del
+// proceso de clasificación.
+export async function listarMovimientosCartones(bodegaId: number | null): Promise<MovimientoCarton[]> {
+  const db = getAvimolDb()
+  let query = db
+    .from("movimientos_cartones")
+    .select(
+      `id, tipo_movimiento, cantidad, costo_unitario, observaciones, creado_en,
+       bodegas(nombre),
+       clasificaciones(codigo, cartones_calculados, cartones_extra)`,
+    )
+    .order("creado_en", { ascending: false })
+
+  if (bodegaId) query = query.eq("bodega_id", bodegaId)
+
+  const { data, error } = await query
+  if (error) {
+    console.error("[avimol] Error listando movimientos de cartones:", error)
+    return []
+  }
+
+  return (data ?? []).map((fila: any) => ({
+    id: fila.id,
+    bodegaNombre: fila.bodegas?.nombre ?? "",
+    tipoMovimiento: fila.tipo_movimiento,
+    cantidad: fila.cantidad,
+    costoUnitario: fila.costo_unitario,
+    observaciones: fila.observaciones,
+    creadoEn: fila.creado_en,
+    clasificacionCodigo: fila.clasificaciones?.codigo ?? null,
+    cartonesCalculados: fila.clasificaciones?.cartones_calculados ?? null,
+    cartonesExtra: fila.clasificaciones?.cartones_extra ?? null,
+  }))
+}
+
 export async function listarConsumoCartones(bodegaId: number | null): Promise<ConsumoCartonClasificacion[]> {
   const db = getAvimolDb()
   let query = db

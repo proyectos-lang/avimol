@@ -8,7 +8,12 @@ import {
   obtenerOrdenConDetalle,
   obtenerLotesDisponibles,
   obtenerDisponibilidadOtrasBodegas,
+  evaluarCierreOrdenCargue,
+  calcularProgresoCargue,
   type DisponibilidadBodega,
+  type AccionCierreCargue,
+  type LineaProgresoCargue,
+  type OrdenCargueResumen,
 } from "@/lib/traslados-actions"
 import type { TipoAveria } from "@/lib/recoleccion-actions"
 
@@ -142,7 +147,10 @@ export async function crearPedido(
   return { success: true, codigo, ordenCargueId: orden?.id }
 }
 
-export async function confirmarFinDespacho(ordenId: number): Promise<{ success: boolean; message?: string }> {
+export async function confirmarFinDespacho(
+  ordenId: number,
+  accion: AccionCierreCargue = "cerrar",
+): Promise<{ success: boolean; message?: string }> {
   const db = getAvimolDb()
   const usuario = await obtenerUsuarioActual()
 
@@ -197,10 +205,137 @@ export async function confirmarFinDespacho(ordenId: number): Promise<{ success: 
     .eq("id", ordenId)
 
   if (orden.pedido) {
-    await db.from("pedidos").update({ estado: "cerrado" }).eq("id", orden.pedido.id)
+    const progreso = await evaluarCierreOrdenCargue(ordenId)
+    const accionFinal = progreso?.completo ? "cerrar" : accion
+    await db
+      .from("pedidos")
+      .update({ estado: accionFinal === "cerrar" ? "cerrado" : "despachado" })
+      .eq("id", orden.pedido.id)
   }
 
   return { success: true }
+}
+
+// Genera una orden de cargue adicional (despacho) sobre un pedido que
+// quedó con remanente (despacho parcial) — otro viaje para completar lo
+// que faltó.
+export async function generarOrdenCargueAdicionalDespacho(
+  pedidoId: number,
+): Promise<{ success: boolean; message?: string; ordenCargueId?: number }> {
+  const db = getAvimolDb()
+  const usuario = await obtenerUsuarioActual()
+
+  const { data: pedido, error: errorPedido } = await db
+    .from("pedidos")
+    .select("id, estado, bodega_id")
+    .eq("id", pedidoId)
+    .maybeSingle()
+
+  if (errorPedido || !pedido) return { success: false, message: "Pedido no encontrado" }
+  if (!["pendiente", "en_picking", "despachado"].includes(pedido.estado)) {
+    return { success: false, message: "Este pedido ya no admite más órdenes de despacho" }
+  }
+
+  const { data: ordenAbierta } = await db
+    .from("ordenes_cargue")
+    .select("id, codigo")
+    .eq("pedido_id", pedidoId)
+    .eq("tipo_operacion", "cargue_despacho")
+    .is("hora_fin_cargue", null)
+    .neq("estado", "anulado")
+    .maybeSingle()
+
+  if (ordenAbierta) {
+    return { success: false, message: `Ya hay una orden abierta: ${ordenAbierta.codigo}. Complétala o anúlala antes de generar otra.` }
+  }
+
+  const codigoOrden = await generarCodigoOrden("CAR")
+  const { data: orden, error: errorOrden } = await db
+    .from("ordenes_cargue")
+    .insert({
+      tipo_operacion: "cargue_despacho",
+      bodega_id: pedido.bodega_id,
+      pedido_id: pedidoId,
+      codigo: codigoOrden,
+      estado: "pendiente",
+      usuario_id: usuario?.id ?? null,
+    })
+    .select("id")
+    .single()
+
+  if (errorOrden || !orden) {
+    console.error("[avimol] Error generando orden de despacho adicional:", errorOrden)
+    return { success: false, message: "No se pudo generar la orden: " + errorOrden?.message }
+  }
+
+  return { success: true, ordenCargueId: orden.id }
+}
+
+export interface ProgresoPedido {
+  pedido: { id: number; codigo: string; estado: string; bodegaNombre: string; clienteNombre: string }
+  lineas: LineaProgresoCargue[]
+  ordenes: OrdenCargueResumen[]
+}
+
+export async function obtenerProgresoPedido(pedidoId: number): Promise<ProgresoPedido | null> {
+  const db = getAvimolDb()
+
+  const { data: pedido, error } = await db
+    .from("pedidos")
+    .select("id, codigo, estado, bodegas(nombre), clientes(nombre)")
+    .eq("id", pedidoId)
+    .maybeSingle()
+
+  if (error || !pedido) return null
+
+  const { data: detalleLineas } = await db
+    .from("pedidos_detalle")
+    .select("referencia_huevo_id, cantidad, referencias_huevo(nombre)")
+    .eq("pedido_id", pedidoId)
+
+  const origenLineas = (detalleLineas ?? []).map((l: any) => ({
+    referenciaId: l.referencia_huevo_id,
+    referenciaNombre: l.referencias_huevo?.nombre ?? "",
+    cantidadSolicitada: l.cantidad,
+  }))
+
+  const lineas = await calcularProgresoCargue(origenLineas, "pedido_id", pedidoId)
+
+  const { data: ordenesData } = await db
+    .from("ordenes_cargue")
+    .select(
+      "id, codigo, tipo_operacion, bodega_id, estado, hora_llegada_vehiculo, hora_inicio_cargue, hora_fin_cargue, hora_inicio_descargue, hora_fin_descargue, peso_total_kg, bodegas(nombre)",
+    )
+    .eq("pedido_id", pedidoId)
+    .order("id", { ascending: false })
+
+  const ordenes: OrdenCargueResumen[] = (ordenesData ?? []).map((o: any) => ({
+    id: o.id,
+    codigo: o.codigo,
+    tipo_operacion: o.tipo_operacion,
+    bodega_id: o.bodega_id,
+    bodega_nombre: o.bodegas?.nombre ?? "",
+    estado: o.estado,
+    hora_llegada_vehiculo: o.hora_llegada_vehiculo,
+    hora_inicio_cargue: o.hora_inicio_cargue,
+    hora_fin_cargue: o.hora_fin_cargue,
+    hora_inicio_descargue: o.hora_inicio_descargue,
+    hora_fin_descargue: o.hora_fin_descargue,
+    peso_total_kg: o.peso_total_kg,
+    solicitud_codigo: pedido.codigo,
+  }))
+
+  return {
+    pedido: {
+      id: pedido.id,
+      codigo: pedido.codigo,
+      estado: pedido.estado,
+      bodegaNombre: (pedido as any).bodegas?.nombre ?? "",
+      clienteNombre: (pedido as any).clientes?.nombre ?? "",
+    },
+    lineas,
+    ordenes,
+  }
 }
 
 export interface DisponibilidadLineaPedido {

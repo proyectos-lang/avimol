@@ -19,6 +19,7 @@ import {
   Layers,
   CalendarDays,
   PackageCheck,
+  AlertTriangle,
   type LucideIcon,
 } from "lucide-react"
 
@@ -75,6 +76,7 @@ export const groups: GrupoNav[] = [
       { label: "Cargue", href: "/cargue", icon: PackageMinus },
       { label: "Descargue", href: "/descargue", icon: PackagePlus },
       { label: "Recepciones", href: "/recepciones", icon: PackageCheck },
+      { label: "Averías", href: "/averias", icon: AlertTriangle },
       { label: "Tarifas", href: "/tarifas", icon: DollarSign },
     ],
   },
