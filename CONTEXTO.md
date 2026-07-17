@@ -432,7 +432,9 @@ El cliente pidió partir la página única `/indicadores` en dashboards dedicado
 
 **3. Página global `/indicadores` recortada.** Se quitaron las secciones "Producción por galpón" y "Aves" (5 StatCards + tabla) porque quedaron duplicadas con los nuevos dashboards — decisión confirmada con el usuario. Ventas, Pedidos, Averías, Tiempos logísticos e Inventario quedan igual. `obtenerProduccionPorGalpon()` y `obtenerIndicadoresAves()` en `lib/indicadores-actions.ts` **no se borraron** (la segunda la reutiliza el nuevo dashboard de Aves); `ProduccionPorGalponChart` tampoco se borró de `components/indicadores/charts.tsx` (la reutiliza la pestaña de Recolección). El export a Excel de `/indicadores` perdió las 2 hojas correspondientes.
 
-`npx tsc --noEmit` limpio en todo el desarrollo. **Pendiente de verificación con Playwright contra la BD real**: falta que el usuario corra `017_indices_indicadores.sql` (son solo índices, la funcionalidad ya trabaja sin ellos, solo afecta el rendimiento de las nuevas consultas).
+`npx tsc --noEmit` limpio en todo el desarrollo.
+
+Verificado con Playwright de punta a punta contra la BD real (después de que el usuario corriera `017_indices_indicadores.sql`): `/recoleccion/indicadores` mostrando las 3 pestañas con datos reales (6.233 recolectados / 67 averías en Recolección, 397 clasificados / 3 averías en Clasificación, 14 normal + 3 extra = 17 cartones); al filtrar por galpón G-01 los totales bajaron correctamente a 1.700 recolectados / 16 averías, coincidiendo con lo que ya mostraba Historial Diario para ese galpón; `/aves/indicadores` con StatChips 3 activos/1 inactivo/4 totales y la tabla por galpón coincidiendo con lo que antes se veía en `/indicadores` (G-03 79.8% ocupación y 10 mortalidad, G-02 100 sacrificios); `/indicadores` confirmado sin las secciones "Producción por galpón" ni "Aves", con Ventas/Pedidos/Averías/Tiempos logísticos/Inventario intactos y el botón "Exportar a Excel" funcionando. Sin errores de consola en ninguna página.
 
 ---
 
