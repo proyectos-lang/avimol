@@ -161,7 +161,26 @@ export async function obtenerIndicadoresRecoleccion(filtros: FiltrosIndicadores)
     console.error("[avimol] Error obteniendo averías de recolección:", errorAverias)
   }
 
-  const averiasPorGalponMap = new Map<number, AveriaRecoleccionPorGalpon>()
+  // Se siembra con TODOS los galpones que recolectaron algo (no solo los
+  // que tienen averías) — un galpón con 0 averías (o solo rechazadas, que
+  // no cuentan) debe seguir apareciendo con sus buenos completos, no
+  // desaparecer de la tabla.
+  const averiasPorGalponMap = new Map<number, AveriaRecoleccionPorGalpon>(
+    Array.from(porGalponMap.values()).map((g) => [
+      g.galponId,
+      {
+        galponId: g.galponId,
+        galponCodigo: g.galponCodigo,
+        galponNombre: g.galponNombre,
+        buenos: g.cantidad,
+        picado: 0,
+        roto: 0,
+        partido: 0,
+        totalAverias: 0,
+        porcentajeAverias: 0,
+      },
+    ]),
+  )
   let totalPicado = 0
   let totalRoto = 0
   let totalPartido = 0

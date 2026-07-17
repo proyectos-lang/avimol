@@ -28,6 +28,11 @@ export interface AveriaFila {
   estado: string
 }
 
+// Solo averías de bodega/logística (despacho y recepción) — las de
+// producción (recolección/clasificación, ligadas a galpón) se manejan
+// aparte en lib/averias-produccion-actions.ts, son cosas conceptualmente
+// distintas (una es sobre un envío, la otra sobre el proceso en el
+// galpón/clasificadora).
 export async function listarAverias(filtros: {
   bodegaId?: number | null
   etapa?: string | null
@@ -43,6 +48,7 @@ export async function listarAverias(filtros: {
        ordenes_cargue(bodega_id),
        clasificaciones(bodega_id)`,
     )
+    .in("etapa", ["despacho", "recepcion"])
     .order("fecha", { ascending: false })
 
   if (filtros.etapa) query = query.eq("etapa", filtros.etapa)

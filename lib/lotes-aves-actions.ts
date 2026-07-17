@@ -139,6 +139,8 @@ export async function ingresarLoteAves(datos: DatosIngresoLote): Promise<{ succe
 export async function trasladarLoteAves(
   loteAvesId: number,
   galponDestinoId: number,
+  cantidad: number,
+  codigoNuevo?: string,
   observaciones?: string,
 ): Promise<{ success: boolean; message?: string }> {
   const db = getAvimolDb()
@@ -146,7 +148,7 @@ export async function trasladarLoteAves(
 
   const { data: lote, error: errorLote } = await db
     .from("lotes_aves")
-    .select("id, galpon_id, cantidad_actual")
+    .select("id, galpon_id, cantidad_actual, fecha_ingreso, edad_semanas_ingreso")
     .eq("id", loteAvesId)
     .single()
 
@@ -158,29 +160,107 @@ export async function trasladarLoteAves(
     return { success: false, message: "El galpón destino debe ser distinto al actual" }
   }
 
-  const { error: errorUpdate } = await db
-    .from("lotes_aves")
-    .update({ galpon_id: galponDestinoId })
-    .eq("id", loteAvesId)
-
-  if (errorUpdate) {
-    console.error("[avimol] Error trasladando lote de aves:", errorUpdate)
-    return { success: false, message: "No se pudo trasladar el lote: " + errorUpdate.message }
+  if (cantidad <= 0 || cantidad > lote.cantidad_actual) {
+    return { success: false, message: `La cantidad debe estar entre 1 y ${lote.cantidad_actual}` }
   }
 
-  const { error: errorMov } = await db.from("movimientos_aves").insert({
-    lote_aves_id: loteAvesId,
-    tipo_movimiento: "traslado",
-    galpon_origen_id: lote.galpon_id,
-    galpon_destino_id: galponDestinoId,
-    cantidad: lote.cantidad_actual,
-    fecha: fechaHoraColombiaISO(),
-    observaciones: observaciones || null,
-    usuario_id: usuario?.id ?? null,
-  })
+  const fecha = fechaHoraColombiaISO()
+
+  if (cantidad === lote.cantidad_actual) {
+    // Traslado completo: se mueve el lote entero, comportamiento igual al de siempre.
+    const { error: errorUpdate } = await db
+      .from("lotes_aves")
+      .update({ galpon_id: galponDestinoId })
+      .eq("id", loteAvesId)
+
+    if (errorUpdate) {
+      console.error("[avimol] Error trasladando lote de aves:", errorUpdate)
+      return { success: false, message: "No se pudo trasladar el lote: " + errorUpdate.message }
+    }
+
+    const { error: errorMov } = await db.from("movimientos_aves").insert({
+      lote_aves_id: loteAvesId,
+      tipo_movimiento: "traslado",
+      galpon_origen_id: lote.galpon_id,
+      galpon_destino_id: galponDestinoId,
+      cantidad,
+      fecha,
+      observaciones: observaciones || null,
+      usuario_id: usuario?.id ?? null,
+    })
+
+    if (errorMov) {
+      console.error("[avimol] Error registrando movimiento de traslado:", errorMov)
+    }
+
+    return { success: true }
+  }
+
+  // Traslado parcial: la porción movida se convierte en un lote nuevo en
+  // el galpón destino (un lote_aves solo puede estar en un galpón a la
+  // vez), conservando la fecha/edad de ingreso original — no reinicia el
+  // reloj de edad de esas aves. El lote original se queda con el resto.
+  if (!codigoNuevo?.trim()) {
+    return { success: false, message: "El código del nuevo lote es obligatorio para un traslado parcial" }
+  }
+
+  const { error: errorUpdateOrigen } = await db
+    .from("lotes_aves")
+    .update({ cantidad_actual: lote.cantidad_actual - cantidad })
+    .eq("id", loteAvesId)
+
+  if (errorUpdateOrigen) {
+    console.error("[avimol] Error descontando el lote de aves origen:", errorUpdateOrigen)
+    return { success: false, message: "No se pudo trasladar: " + errorUpdateOrigen.message }
+  }
+
+  const { data: loteNuevo, error: errorLoteNuevo } = await db
+    .from("lotes_aves")
+    .insert({
+      codigo: codigoNuevo.trim(),
+      galpon_id: galponDestinoId,
+      cantidad_ingreso: cantidad,
+      cantidad_actual: cantidad,
+      fecha_ingreso: lote.fecha_ingreso,
+      edad_semanas_ingreso: lote.edad_semanas_ingreso,
+      estado: "activo",
+    })
+    .select("id")
+    .single()
+
+  if (errorLoteNuevo || !loteNuevo) {
+    console.error("[avimol] Error creando lote de aves destino del traslado parcial:", errorLoteNuevo)
+    return { success: false, message: "No se pudo crear el lote destino: " + errorLoteNuevo?.message }
+  }
+
+  // Se registra el mismo movimiento en ambos lotes (movimientos_aves.lote_aves_id
+  // es una FK a un solo lote, no hay forma de que una fila represente el
+  // evento en los dos a la vez) para que el historial de cada uno sea coherente.
+  const { error: errorMov } = await db.from("movimientos_aves").insert([
+    {
+      lote_aves_id: loteAvesId,
+      tipo_movimiento: "traslado",
+      galpon_origen_id: lote.galpon_id,
+      galpon_destino_id: galponDestinoId,
+      cantidad,
+      fecha,
+      observaciones: observaciones || null,
+      usuario_id: usuario?.id ?? null,
+    },
+    {
+      lote_aves_id: loteNuevo.id,
+      tipo_movimiento: "traslado",
+      galpon_origen_id: lote.galpon_id,
+      galpon_destino_id: galponDestinoId,
+      cantidad,
+      fecha,
+      observaciones: observaciones || null,
+      usuario_id: usuario?.id ?? null,
+    },
+  ])
 
   if (errorMov) {
-    console.error("[avimol] Error registrando movimiento de traslado:", errorMov)
+    console.error("[avimol] Error registrando movimiento de traslado parcial:", errorMov)
   }
 
   return { success: true }

@@ -62,6 +62,7 @@ export const groups: GrupoNav[] = [
       { label: "Clasificación", href: "/clasificacion", icon: Layers },
       { label: "Lotes de huevo", href: "/lotes-huevo", icon: ClipboardList },
       { label: "Historial diario", href: "/recoleccion/historial", icon: CalendarDays },
+      { label: "Averías", href: "/recoleccion/averias", icon: AlertTriangle },
       { label: "Indicadores", href: "/recoleccion/indicadores", icon: BarChart3 },
     ],
   },

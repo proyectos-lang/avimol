@@ -349,19 +349,38 @@ function DialogoTraslado({
   onGuardado: () => void
 }) {
   const [galponDestinoId, setGalponDestinoId] = useState("")
+  const [cantidad, setCantidad] = useState(lote.cantidad_actual.toString())
+  const [codigoNuevo, setCodigoNuevo] = useState("")
   const [observaciones, setObservaciones] = useState("")
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const cantidadNum = Number(cantidad)
+  const esParcial = cantidadNum > 0 && cantidadNum < lote.cantidad_actual
 
   async function onGuardar() {
     if (!galponDestinoId) {
       setError("Selecciona el galpón destino")
       return
     }
+    if (!cantidadNum || cantidadNum <= 0 || cantidadNum > lote.cantidad_actual) {
+      setError(`La cantidad debe estar entre 1 y ${lote.cantidad_actual}`)
+      return
+    }
+    if (esParcial && !codigoNuevo.trim()) {
+      setError("El código del nuevo lote es obligatorio para un traslado parcial")
+      return
+    }
     setGuardando(true)
     setError(null)
 
-    const resultado = await trasladarLoteAves(lote.id, Number(galponDestinoId), observaciones)
+    const resultado = await trasladarLoteAves(
+      lote.id,
+      Number(galponDestinoId),
+      cantidadNum,
+      esParcial ? codigoNuevo.trim() : undefined,
+      observaciones,
+    )
     setGuardando(false)
 
     if (!resultado.success) {
@@ -369,7 +388,7 @@ function DialogoTraslado({
       return
     }
 
-    toast.success(`Lote ${lote.codigo} trasladado`)
+    toast.success(esParcial ? `${cantidadNum.toLocaleString("es-CO")} aves trasladadas a un lote nuevo` : `Lote ${lote.codigo} trasladado`)
     onCerrar()
     onGuardado()
   }
@@ -382,7 +401,10 @@ function DialogoTraslado({
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground">
-            Galpón actual: {lote.galpon_codigo} — {lote.galpon_nombre}. El lote conserva su historial y edad.
+            Galpón actual: {lote.galpon_codigo} — {lote.galpon_nombre}.{" "}
+            {esParcial
+              ? "Se crea un lote nuevo en el galpón destino con la misma edad; el lote original se queda con el resto."
+              : "El lote conserva su historial y edad."}
           </p>
           <div className="flex flex-col gap-2">
             <Label>Galpón destino</Label>
@@ -401,6 +423,19 @@ function DialogoTraslado({
               </SelectContent>
             </Select>
           </div>
+          <div className="flex flex-col gap-2">
+            <Label>Cantidad a trasladar</Label>
+            <Input type="number" value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
+            <p className="text-xs text-muted-foreground">Máximo: {lote.cantidad_actual.toLocaleString("es-CO")}</p>
+          </div>
+          {esParcial && (
+            <div className="flex flex-col gap-2">
+              <Label>
+                Código del nuevo lote <span className="text-destructive">*</span>
+              </Label>
+              <Input value={codigoNuevo} onChange={(e) => setCodigoNuevo(e.target.value)} placeholder="LA-2026-001-B" />
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <Label>Observaciones (opcional)</Label>
             <Textarea value={observaciones} onChange={(e) => setObservaciones(e.target.value)} />

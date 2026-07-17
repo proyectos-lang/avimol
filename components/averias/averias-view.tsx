@@ -20,9 +20,6 @@ import { listarBodegas, type Bodega } from "@/lib/bodegas-actions"
 import { listarAverias, registrarProcesamientoYemas, type AveriaFila } from "@/lib/averias-actions"
 
 const ETAPAS = [
-  { value: "recoleccion", label: "Recolección" },
-  { value: "clasificacion", label: "Clasificación" },
-  { value: "transporte", label: "Transporte" },
   { value: "despacho", label: "Despacho" },
   { value: "recepcion", label: "Recepción" },
 ]
@@ -126,8 +123,8 @@ export function AveriasView() {
   return (
     <div>
       <PageHeader
-        titulo="Averías"
-        subtitulo="Picados, rotos y partidos de todas las etapas — recolección, clasificación, despacho y recepción"
+        titulo="Averías de bodega"
+        subtitulo="Picados, rotos y partidos de despacho y recepción — las de recolección/clasificación se manejan en Recolección → Averías"
       >
         <StatChip icono={AlertTriangle} label="Averías" valor={averias.length} />
         <StatChip icono={Droplet} label="Pendientes de procesar yema" valor={seleccionables.length} />
