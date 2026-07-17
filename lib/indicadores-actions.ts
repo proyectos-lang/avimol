@@ -220,7 +220,10 @@ export async function obtenerAverias(): Promise<{
   total: number
 }> {
   const db = getAvimolDb()
-  const { data, error } = await db.from("averias_huevo").select("etapa, tipo_averia, cantidad")
+  const { data, error } = await db
+    .from("averias_huevo")
+    .select("etapa, tipo_averia, cantidad")
+    .neq("estado", "rechazada")
 
   if (error) {
     console.error("[avimol] Error obteniendo averías:", error)

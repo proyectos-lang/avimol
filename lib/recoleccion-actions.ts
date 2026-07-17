@@ -3,6 +3,7 @@
 import { getAvimolDb } from "@/lib/supabase-avimol"
 import { obtenerUsuarioActual } from "@/lib/auth/actions"
 import { fechaColombiaHoy, fechaHoraColombiaISO } from "@/lib/date-utils"
+import { obtenerAvesActivasPorGalpon } from "@/lib/lotes-aves-actions"
 
 export interface GalponConLoteActivo {
   galpon_id: number
@@ -223,6 +224,10 @@ export interface RecoleccionDia {
   averia_roto: number
   averia_partido: number
   total_averias: number
+  aves_activas: number
+  eficiencia_porcentaje: number | null
+  minimo_esperado: number | null
+  cumple_minimo: boolean | null
 }
 
 // Agregado histórico por día y galpón — se calcula desde el kardex
@@ -265,14 +270,21 @@ export async function listarRecoleccionPorDia(): Promise<RecoleccionDia[]> {
         averia_roto: 0,
         averia_partido: 0,
         total_averias: 0,
+        aves_activas: 0,
+        eficiencia_porcentaje: null,
+        minimo_esperado: null,
+        cumple_minimo: null,
       })
     }
   }
 
+  // Excluye averías rechazadas de los totales — se tratan como error de
+  // registro, ya no deben contar (a diferencia de pendiente/aprobada).
   const { data: averias, error: errorAverias } = await db
     .from("averias_huevo")
     .select("tipo_averia, cantidad, lotes_huevo(fecha_cosecha, galpones(id, codigo, nombre))")
     .eq("etapa", "recoleccion")
+    .neq("estado", "rechazada")
 
   if (errorAverias) {
     console.error("[avimol] Error listando averías de recolección:", errorAverias)
@@ -296,6 +308,10 @@ export async function listarRecoleccionPorDia(): Promise<RecoleccionDia[]> {
         averia_roto: 0,
         averia_partido: 0,
         total_averias: 0,
+        aves_activas: 0,
+        eficiencia_porcentaje: null,
+        minimo_esperado: null,
+        cumple_minimo: null,
       }
       grupos.set(clave, grupo)
     }
@@ -304,6 +320,24 @@ export async function listarRecoleccionPorDia(): Promise<RecoleccionDia[]> {
     else if (fila.tipo_averia === "roto") grupo.averia_roto += fila.cantidad
     else if (fila.tipo_averia === "partido") grupo.averia_partido += fila.cantidad
     grupo.total_averias += fila.cantidad
+  }
+
+  // Eficiencia esperada: aves ACTIVAS HOY del galpón × su % configurado —
+  // una aproximación (no reconstruye cuántas aves había ese día
+  // específico en el pasado), aceptada explícitamente por simplicidad.
+  const [{ data: galpones }, avesPorGalpon] = await Promise.all([
+    db.from("galpones").select("id, eficiencia_porcentaje"),
+    obtenerAvesActivasPorGalpon(),
+  ])
+  const eficienciaPorGalpon = new Map((galpones ?? []).map((g: any) => [g.id, g.eficiencia_porcentaje]))
+
+  for (const grupo of grupos.values()) {
+    grupo.aves_activas = avesPorGalpon.get(grupo.galpon_id) ?? 0
+    grupo.eficiencia_porcentaje = eficienciaPorGalpon.get(grupo.galpon_id) ?? null
+    if (grupo.eficiencia_porcentaje != null) {
+      grupo.minimo_esperado = Math.ceil((grupo.aves_activas * grupo.eficiencia_porcentaje) / 100)
+      grupo.cumple_minimo = grupo.total_recolectado >= grupo.minimo_esperado
+    }
   }
 
   return Array.from(grupos.values()).sort((a, b) => b.fecha_cosecha.localeCompare(a.fecha_cosecha))

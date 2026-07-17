@@ -240,3 +240,25 @@ export async function registrarSalidaAves(
 
   return { success: true }
 }
+
+// Aves activas HOY por galpón (suma de cantidad_actual de lotes con
+// estado='activo') — mismo cálculo ya usado en
+// indicadores-actions.ts::obtenerIndicadoresAves, extraído acá como
+// helper reusable para no duplicarlo (p. ej. en el cálculo de eficiencia
+// de Historial diario).
+export async function obtenerAvesActivasPorGalpon(): Promise<Map<number, number>> {
+  const db = getAvimolDb()
+  const { data, error } = await db.from("v_lotes_aves_edad").select("galpon_id, cantidad_actual, estado")
+
+  if (error) {
+    console.error("[avimol] Error obteniendo aves activas por galpón:", error)
+    return new Map()
+  }
+
+  const porGalpon = new Map<number, number>()
+  for (const l of (data ?? []) as any[]) {
+    if (l.estado !== "activo") continue
+    porGalpon.set(l.galpon_id, (porGalpon.get(l.galpon_id) ?? 0) + l.cantidad_actual)
+  }
+  return porGalpon
+}

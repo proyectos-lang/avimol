@@ -91,6 +91,7 @@ el SQL Editor de Supabase):
 13. **`013_cliente_consumidor_final.sql`** — siembra el cliente "Consumidor final" (idempotente, `WHERE NOT EXISTS`).
 14. **`014_cargue_parcial.sql`** — amplía el CHECK de `solicitudes_traslado.estado` con `en_picking`/`cargado_parcial` (busca y reemplaza el constraint dinámicamente vía `pg_constraint`, sin asumir su nombre exacto). `pedidos.estado` no necesitó ALTER: `en_picking`/`despachado` ya estaban reservados en el CHECK desde la Fase 1.
 15. **`015_recepciones_averias_yemas.sql`** — `ordenes_cargue.hora_clasificacion_averia`; tablas `procesamientos_yema_averia`, `inventario_yemas`, `movimientos_yemas`; `averias_huevo.procesamiento_yema_id`.
+16. **`016_eficiencia_galpon_estado_averias.sql`** — `galpones.eficiencia_porcentaje`; `averias_huevo.estado` (CHECK `pendiente`/`aprobada`/`rechazada`, default `pendiente`) + `procesada_por`/`procesada_en`.
 
 ### Tablas por dominio
 
@@ -99,7 +100,7 @@ el SQL Editor de Supabase):
 
 **Aves**
 - `granjas(id, nombre, ubicacion, activo)`
-- `galpones(id, granja_id, codigo, nombre, capacidad, activo)`
+- `galpones(id, granja_id, codigo, nombre, capacidad, eficiencia_porcentaje, activo)` — `eficiencia_porcentaje` (migración 016, nullable) es el % usado en Historial diario para calcular el mínimo esperado de recolección diaria (aves activas del galpón × este %).
 - `lotes_aves(id, galpon_id, codigo, cantidad_ingreso, cantidad_actual, fecha_ingreso, edad_semanas_ingreso, estado, creado_en)` — `galpon_id` es la ubicación **actual** (el lote conserva identidad al trasladarse). `estado` ∈ {activo, sacrificado, cerrado}. **Un lote activo por galpón a la vez** (regla de negocio, no constraint duro).
 - `movimientos_aves(id, lote_aves_id, tipo_movimiento, galpon_origen_id, galpon_destino_id, cantidad, fecha, observaciones, usuario_id)` — tipo ∈ {ingreso, traslado, mortalidad, sacrificio}.
 - **Vista `v_lotes_aves_edad`**: `lotes_aves.*` + `edad_actual_semanas` calculada en vivo (`edad_semanas_ingreso + FLOOR((hoy - fecha_ingreso)/7)`). **La edad de las aves NUNCA se almacena**, siempre se lee de esta vista.
@@ -116,7 +117,7 @@ el SQL Editor de Supabase):
 **Cosecha / lotes de huevo**
 - `lotes_huevo(id, codigo, galpon_id, lote_aves_id, edad_semanas_captura, fecha_cosecha, bodega_id, origen, codigo_qr, usuario_id, creado_en)` — `codigo` formato `AAAAMMDD-###`. `edad_semanas_captura` es una **foto fija** (no cambia después, a diferencia de la edad del lote de aves). `origen` ∈ {app_movil, manual_clasificadora}.
 - `lotes_huevo_detalle(id, lote_huevo_id, referencia_huevo_id, anaquel_id, cantidad)` — clasificación por tipo/color al momento de cosechar.
-- `averias_huevo(id, lote_huevo_id, referencia_huevo_id, etapa, tipo_averia, cantidad, cantidad_yemas, cantidad_bolsas_yema, orden_cargue_id, fecha, observaciones, usuario_id, clasificacion_id, procesamiento_yema_id)` — etapa ∈ {recoleccion, clasificacion, transporte, despacho, recepcion}; tipo_averia ∈ {picado, roto, partido}. `cantidad_yemas`/`cantidad_bolsas_yema` (migración 012) son un campo **histórico/discontinuado**: se llenaban cuando la recepción capturaba yema/bolsa por línea directamente en Descargue (ronda anterior); desde la Ronda 7, el código nuevo ya no los puebla — las yemas se procesan en lote por bodega desde `/averias` (ver `procesamiento_yema_id` abajo). `procesamiento_yema_id` (migración 015, no-null = ya se contabilizó en un procesamiento de yemas, evita doble conteo).
+- `averias_huevo(id, lote_huevo_id, referencia_huevo_id, etapa, tipo_averia, cantidad, cantidad_yemas, cantidad_bolsas_yema, orden_cargue_id, fecha, observaciones, usuario_id, clasificacion_id, procesamiento_yema_id, estado, procesada_por, procesada_en)` — etapa ∈ {recoleccion, clasificacion, transporte, despacho, recepcion}; tipo_averia ∈ {picado, roto, partido}. `cantidad_yemas`/`cantidad_bolsas_yema` (migración 012) son un campo **histórico/discontinuado**: se llenaban cuando la recepción capturaba yema/bolsa por línea directamente en Descargue (ronda anterior); desde la Ronda 7, el código nuevo ya no los puebla — las yemas se procesan en lote por bodega desde `/averias` (ver `procesamiento_yema_id` abajo). `procesamiento_yema_id` (migración 015, no-null = ya se contabilizó en un procesamiento de yemas, evita doble conteo). `estado` (migración 016) ∈ {pendiente, aprobada, rechazada}, default `pendiente` — control de calidad expuesto desde Historial diario (ver Ronda 8); una avería `rechazada` se excluye de los totales mostrados en Historial diario, `/averias` e Indicadores (se trata como error de registro), pero sigue visible en los listados con su badge de estado. `procesada_por`/`procesada_en` quedan `null` mientras esté en `pendiente`.
 
 **Cartones** (migración 010, ver Ronda 6 del historial)
 - `costos_carton(id, valor, vigente_desde, vigente_hasta, activo)` — histórico con vigencia, mismo patrón que `tarifas_servicio_descargue`.
@@ -401,6 +402,21 @@ El cliente (Jeffrey Jiménez) mandó un lote de 10 observaciones por WhatsApp tr
 
 **Verificado con Playwright de punta a punta contra la BD real** (después de que el usuario corriera las migraciones 014 y 015), incluyendo escritura real en cada paso nuevo: `/averias` mostrando 7 averías reales con Origen correcto (Recolección/Clasificación); tab Cartones mostrando el kardex real (2 entradas manuales + 1 salida por clasificación con "Calculados 14 · Extra 3" inline); **el bug de vehículo atascado reproducido y corregido en un dato real de producción** (`CAR20260716-002`/ABC123); picking funcionando sin vehículo asignado (`AAA Rojo` sin stock mostró correctamente "Sin inventario disponible", no un error); `/traslados/2` mostrando Solicitado/Cargado/Pendiente (50/0/50 en ambas referencias) y la orden abierta con link a `/cargue/2`; `/pedidos` con su tabla de historial nueva mostrando `PED20260716-001` real; Recepciones → Clasificar procesando una recepción real (`DES20260716-001`, 3 líneas, 48 buenos + 2 rotos en una de ellas) — confirmado que los 48 buenos se acreditaron a inventario y los 2 rotos aparecieron en `/averias` con etapa Recepción; ese mismo roto procesado en yemas desde `/averias` (checkbox → 1 yema) y confirmado que dejó de ser seleccionable; historial de ventas mostrando Unidades y el diálogo de detalle con cantidad/precio/subtotal/total reales; sección Aves en Indicadores mostrando capacidad/ocupación/mortalidad/sacrificio/edad reales y distintos por galpón (G-03 con 79.8% de ocupación y 10 muertes, G-02 con 100 sacrificios). `npx tsc --noEmit` limpio en todo el proyecto durante todo el desarrollo.
 
+### Ronda 8 — Eficiencia de galpón, control de averías y detalle de lotes en Historial Diario (2026-07-17)
+El cliente pidió 3 mejoras sobre Historial Diario. Se investigó el código existente y se confirmaron con el usuario 2 decisiones de diseño antes de tocar código. Requirió 1 migración: `016_eficiencia_galpon_estado_averias.sql`.
+
+**1. % de eficiencia por galpón.** Nuevo campo `galpones.eficiencia_porcentaje` (clona exactamente el patrón ya usado para `capacidad`: mismo ciclo completo en `lib/galpones-actions.ts` y `components/galpones/galpones-view.tsx`). Con eso, Historial Diario calcula por día/galpón un **mínimo esperado** = aves activas del galpón × este % (`Math.ceil`), y marca la celda de "Total recolectado" con un ícono verde (cumple) o ámbar (no cumple) — neutro si el galpón no tiene el % configurado (no se puede evaluar, no se pinta como incumplimiento).
+
+**Decisión confirmada con el usuario**: la cantidad de aves usada es la cantidad **activa HOY** en cada galpón (`lib/lotes-aves-actions.ts::obtenerAvesActivasPorGalpon`, nuevo helper extraído de la lógica ya usada en `obtenerIndicadoresAves`), no una reconstrucción histórica exacta día por día vía el kardex de `movimientos_aves`. Es una aproximación explícitamente aceptada — para galpones con mortalidad/sacrificio/traslados recientes, los días antiguos del historial no reflejan el conteo exacto de ese día. Reconstruir el conteo histórico exacto es técnicamente viable (el kardex de `movimientos_aves` tiene todo lo necesario) pero se dejó fuera de esta ronda por complejidad/costo.
+
+**2. Aprobar/rechazar averías (control de calidad).** `averias_huevo` ganó `estado` (`pendiente`/`aprobada`/`rechazada`, default `pendiente`) + `procesada_por`/`procesada_en`. Nueva `actualizarEstadoAveria(averiaId, estado)` en `lib/averias-actions.ts`. El control se expone únicamente desde el detalle de Historial Diario (no desde `/averias`, que solo muestra el estado como badge informativo).
+
+**Decisión confirmada con el usuario**: rechazar una avería la **excluye de los totales** en los 3 lugares que ya agregaban averías — `listarRecoleccionPorDia` (`lib/recoleccion-actions.ts`, `.neq("estado","rechazada")`), `listarAverias`/StatChips de `/averias`, y `obtenerAverias` de Indicadores (`lib/indicadores-actions.ts`) — porque se trata como un error de registro, no como algo que realmente ocurrió. La fila **no se borra ni se oculta**: sigue visible en `/averias` con el badge "Rechazada" (rojo, agregado a `components/ui/estado-badge.tsx` junto con "Aprobada" en verde), solo deja de sumar. `registrarProcesamientoYemas` también gana una validación defensiva para no permitir procesar una avería rechazada (hoy inalcanzable en la práctica porque este control solo se expone para averías de recolección, pero cierra el caso).
+
+**3. Unificación con Lotes de huevo.** Nueva `listarLotesHuevoPorGalponYFecha(galponId, fecha)` en `lib/lotes-huevo-actions.ts` — trae todos los `lotes_huevo` de un galpón+fecha (confirmado: un mismo día/galpón puede generar **varios** lotes distintos, cada recolección crea uno nuevo vía `generarCodigoLoteHuevo`, nunca se acumula en uno existente) con su cantidad recolectada (kardex) y sus averías de etapa recolección. `components/recoleccion/historial-diario-view.tsx` ganó una columna "Ver" (ícono `Eye`) que abre un `Dialog` (mismo patrón ya usado 4 veces en la app) con dos tablas: **Lotes de ese día** y **Averías — aprobar o rechazar** (con un `Select` de estado por avería que llama `actualizarEstadoAveria` y refresca tanto el diálogo como la lista principal).
+
+Verificado con Playwright de punta a punta contra la BD real: se configuró 90% de eficiencia en el galpón G-01 (2.500 aves activas reales) y Historial Diario mostró correctamente "Esperado (mín.): 2.250" con ícono ámbar de incumplimiento porque ese día solo se recolectaron 1.000; los galpones sin % configurado mostraron "—" sin marcar incumplimiento. Se abrió el detalle de una fila real (G-02, lote `20260716-004`) y se vieron sus lotes y su avería real (Roto, 2). Al cambiar esa avería a "Rechazada": el total de averías de Historial Diario bajó de 63 a 61 en vivo, la fila de G-02 pasó a mostrar "—", y en `/averias` la fila quedó visible con el badge rojo "Rechazada" sin desaparecer de la lista. `npx tsc --noEmit` limpio en todo el desarrollo.
+
 ---
 
 ## 5. Cómo levantar el entorno de desarrollo
@@ -445,6 +461,12 @@ ronda — el bug real que motivó la Fase D), se clasificó por completo la
 recepción `DES20260716-001` (48 buenos + 2 rotos de A Rojo, 30 buenos de AA
 Rojo, 10 buenos de A Rojo — el inventario y la avería de recepción quedaron
 acreditados de verdad), y se procesó 1 yema a partir de esos 2 rotos.
+
+**Nota (Ronda 8)**: se configuró `eficiencia_porcentaje = 90` en el galpón
+real `G-01` (queda así en la base, no se revirtió), y se rechazó de verdad
+la avería real de recolección de `Clasificadora 02` / lote `20260716-004`
+(roto, cantidad 2) — queda con `estado='rechazada'` permanentemente, ya no
+cuenta en los totales de Historial Diario, `/averias` ni Indicadores.
 
 ---
 

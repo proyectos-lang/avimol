@@ -25,6 +25,7 @@ export interface AveriaFila {
   fecha: string
   observaciones: string | null
   procesadaEnYemas: boolean
+  estado: string
 }
 
 export async function listarAverias(filtros: {
@@ -36,7 +37,7 @@ export async function listarAverias(filtros: {
   let query = db
     .from("averias_huevo")
     .select(
-      `id, etapa, tipo_averia, cantidad, fecha, observaciones, procesamiento_yema_id,
+      `id, etapa, tipo_averia, cantidad, fecha, observaciones, procesamiento_yema_id, estado,
        lotes_huevo(codigo, bodega_id),
        referencias_huevo(nombre),
        ordenes_cargue(bodega_id),
@@ -76,6 +77,7 @@ export async function listarAverias(filtros: {
       fecha: fila.fecha,
       observaciones: fila.observaciones,
       procesadaEnYemas: fila.procesamiento_yema_id != null,
+      estado: fila.estado,
     }
   })
 
@@ -99,7 +101,7 @@ export async function registrarProcesamientoYemas(
 
   const { data: averias, error: errorAverias } = await db
     .from("averias_huevo")
-    .select("id, etapa, procesamiento_yema_id, orden_cargue_id, ordenes_cargue(bodega_id)")
+    .select("id, etapa, procesamiento_yema_id, estado, orden_cargue_id, ordenes_cargue(bodega_id)")
     .in("id", averiaIds)
 
   if (errorAverias || !averias) {
@@ -112,6 +114,9 @@ export async function registrarProcesamientoYemas(
     }
     if (a.procesamiento_yema_id != null) {
       return { success: false, message: "Una o más averías ya fueron procesadas" }
+    }
+    if (a.estado === "rechazada") {
+      return { success: false, message: "No se pueden procesar averías rechazadas" }
     }
     if (a.ordenes_cargue?.bodega_id !== bodegaId) {
       return { success: false, message: "Todas las averías deben pertenecer a la misma bodega" }
@@ -187,4 +192,32 @@ export async function listarInventarioYemas(): Promise<InventarioYemaFila[]> {
     bodegaNombre: fila.bodegas?.nombre ?? "",
     cantidadDisponible: fila.cantidad_disponible,
   }))
+}
+
+// Control de calidad del registro (aprobar/rechazar) — hoy expuesto
+// desde Historial diario para averías de recolección. Una avería
+// rechazada se excluye de los totales (Historial diario, /averias,
+// Indicadores) porque se trata como error de registro, no como algo que
+// realmente ocurrió.
+export async function actualizarEstadoAveria(
+  averiaId: number,
+  estado: "pendiente" | "aprobada" | "rechazada",
+): Promise<{ success: boolean; message?: string }> {
+  const db = getAvimolDb()
+  const usuario = await obtenerUsuarioActual()
+
+  const { error } = await db
+    .from("averias_huevo")
+    .update({
+      estado,
+      procesada_por: estado === "pendiente" ? null : usuario?.id ?? null,
+      procesada_en: estado === "pendiente" ? null : fechaHoraColombiaISO(),
+    })
+    .eq("id", averiaId)
+
+  if (error) {
+    console.error("[avimol] Error actualizando estado de avería:", error)
+    return { success: false, message: "No se pudo actualizar el estado: " + error.message }
+  }
+  return { success: true }
 }

@@ -7,6 +7,7 @@ export interface Galpon {
   codigo: string
   nombre: string
   capacidad: number | null
+  eficiencia_porcentaje: number | null
   activo: boolean
   granja_id: number | null
   granja_nombre: string | null
@@ -16,7 +17,7 @@ export async function listarGalpones(): Promise<Galpon[]> {
   const db = getAvimolDb()
   const { data, error } = await db
     .from("galpones")
-    .select("id, codigo, nombre, capacidad, activo, granja_id, granjas(nombre)")
+    .select("id, codigo, nombre, capacidad, eficiencia_porcentaje, activo, granja_id, granjas(nombre)")
     .order("codigo", { ascending: true })
 
   if (error) {
@@ -29,6 +30,7 @@ export async function listarGalpones(): Promise<Galpon[]> {
     codigo: fila.codigo,
     nombre: fila.nombre,
     capacidad: fila.capacidad,
+    eficiencia_porcentaje: fila.eficiencia_porcentaje,
     activo: fila.activo,
     granja_id: fila.granja_id,
     granja_nombre: fila.granjas?.nombre ?? null,
@@ -39,6 +41,7 @@ export interface DatosGalpon {
   codigo: string
   nombre: string
   capacidad: number | null
+  eficienciaPorcentaje: number | null
   granjaId: number | null
 }
 
@@ -48,6 +51,7 @@ export async function crearGalpon(datos: DatosGalpon): Promise<{ success: boolea
     codigo: datos.codigo,
     nombre: datos.nombre,
     capacidad: datos.capacidad,
+    eficiencia_porcentaje: datos.eficienciaPorcentaje,
     granja_id: datos.granjaId,
   })
 
@@ -69,6 +73,7 @@ export async function actualizarGalpon(
       codigo: datos.codigo,
       nombre: datos.nombre,
       capacidad: datos.capacidad,
+      eficiencia_porcentaje: datos.eficienciaPorcentaje,
       granja_id: datos.granjaId,
     })
     .eq("id", id)

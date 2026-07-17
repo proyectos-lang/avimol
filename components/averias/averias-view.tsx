@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/ui/page-header"
 import { StatChip } from "@/components/ui/stat-chip"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { EstadoBadge } from "@/components/ui/estado-badge"
 import { formatearFechaHoraColombia } from "@/lib/date-utils"
 import { listarBodegas, type Bodega } from "@/lib/bodegas-actions"
 import { listarAverias, registrarProcesamientoYemas, type AveriaFila } from "@/lib/averias-actions"
@@ -27,6 +28,11 @@ const ETAPAS = [
 ]
 
 const TIPO_LABEL: Record<string, string> = { picado: "Picado", roto: "Roto", partido: "Partido" }
+const ESTADO_AVERIA_LABEL: Record<string, string> = {
+  pendiente: "Pendiente",
+  aprobada: "Aprobada",
+  rechazada: "Rechazada",
+}
 
 export function AveriasView() {
   const [bodegas, setBodegas] = useState<Bodega[]>([])
@@ -191,6 +197,7 @@ export function AveriasView() {
                 <TableHead>Referencia</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead className="text-right">Cantidad</TableHead>
+                <TableHead>Estado</TableHead>
                 <TableHead>Observación</TableHead>
               </TableRow>
             </TableHeader>
@@ -210,6 +217,9 @@ export function AveriasView() {
                   <TableCell>{TIPO_LABEL[a.tipoAveria] ?? a.tipoAveria}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
                     {a.cantidad.toLocaleString("es-CO")}
+                  </TableCell>
+                  <TableCell>
+                    <EstadoBadge estado={a.estado} label={ESTADO_AVERIA_LABEL[a.estado] ?? a.estado} />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{a.observaciones ?? "—"}</TableCell>
                 </TableRow>

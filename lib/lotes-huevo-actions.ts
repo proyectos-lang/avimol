@@ -87,3 +87,84 @@ export async function obtenerDetalleLoteHuevo(
     })),
   }
 }
+
+export interface AveriaDelLote {
+  id: number
+  tipoAveria: string
+  cantidad: number
+  estado: string
+  observaciones: string | null
+}
+
+export interface LoteDelDia {
+  loteHuevoId: number
+  codigo: string
+  creadoEn: string
+  origen: string
+  cantidadRecolectada: number
+  averias: AveriaDelLote[]
+}
+
+// Un mismo día+galpón puede tener varios lotes_huevo (cada recolección
+// crea uno nuevo, ver registrarRecoleccion) — esto trae todos los de un
+// galpón+fecha específicos, con su cantidad recolectada (kardex) y sus
+// averías de etapa recolección, para el detalle que se despliega desde
+// Historial diario.
+export async function listarLotesHuevoPorGalponYFecha(galponId: number, fecha: string): Promise<LoteDelDia[]> {
+  const db = getAvimolDb()
+
+  const { data: lotes, error: errorLotes } = await db
+    .from("lotes_huevo")
+    .select("id, codigo, creado_en, origen")
+    .eq("galpon_id", galponId)
+    .eq("fecha_cosecha", fecha)
+    .order("codigo", { ascending: true })
+
+  if (errorLotes) {
+    console.error("[avimol] Error listando lotes del día:", errorLotes)
+    return []
+  }
+  if (!lotes || lotes.length === 0) return []
+
+  const loteIds = lotes.map((l) => l.id)
+
+  const [{ data: movimientos }, { data: averias }] = await Promise.all([
+    db
+      .from("movimientos_huevo_sin_clasificar")
+      .select("lote_huevo_id, cantidad")
+      .eq("tipo_movimiento", "entrada_cosecha")
+      .in("lote_huevo_id", loteIds),
+    db
+      .from("averias_huevo")
+      .select("id, lote_huevo_id, tipo_averia, cantidad, estado, observaciones")
+      .eq("etapa", "recoleccion")
+      .in("lote_huevo_id", loteIds),
+  ])
+
+  const cantidadPorLote = new Map<number, number>()
+  for (const m of (movimientos ?? []) as any[]) {
+    cantidadPorLote.set(m.lote_huevo_id, (cantidadPorLote.get(m.lote_huevo_id) ?? 0) + m.cantidad)
+  }
+
+  const averiasPorLote = new Map<number, AveriaDelLote[]>()
+  for (const a of (averias ?? []) as any[]) {
+    const lista = averiasPorLote.get(a.lote_huevo_id) ?? []
+    lista.push({
+      id: a.id,
+      tipoAveria: a.tipo_averia,
+      cantidad: a.cantidad,
+      estado: a.estado,
+      observaciones: a.observaciones,
+    })
+    averiasPorLote.set(a.lote_huevo_id, lista)
+  }
+
+  return lotes.map((l: any) => ({
+    loteHuevoId: l.id,
+    codigo: l.codigo,
+    creadoEn: l.creado_en,
+    origen: l.origen,
+    cantidadRecolectada: cantidadPorLote.get(l.id) ?? 0,
+    averias: averiasPorLote.get(l.id) ?? [],
+  }))
+}

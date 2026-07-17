@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 const ESTILOS: Record<string, string> = {
   cerrado: "border-transparent bg-green-600 text-white hover:bg-green-600",
   recibido: "border-transparent bg-green-600 text-white hover:bg-green-600",
+  aprobada: "border-transparent bg-green-600 text-white hover:bg-green-600",
   activo: "border-transparent bg-green-600 text-white hover:bg-green-600",
   activa: "border-transparent bg-green-600 text-white hover:bg-green-600",
   disponible: "border-transparent bg-green-600 text-white hover:bg-green-600",
@@ -25,6 +26,7 @@ const ESTILOS: Record<string, string> = {
   inactivo: "border-transparent bg-muted text-muted-foreground",
   inactiva: "border-transparent bg-muted text-muted-foreground",
   anulado: "border-transparent bg-destructive text-white hover:bg-destructive",
+  rechazada: "border-transparent bg-destructive text-white hover:bg-destructive",
 }
 
 export function EstadoBadge({ estado, label }: { estado: string; label: string }) {

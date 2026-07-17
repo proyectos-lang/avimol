@@ -35,6 +35,7 @@ export function GalponesView() {
   const [codigo, setCodigo] = useState("")
   const [nombre, setNombre] = useState("")
   const [capacidad, setCapacidad] = useState("")
+  const [eficienciaPorcentaje, setEficienciaPorcentaje] = useState("")
   const [granjaId, setGranjaId] = useState<string>("")
   const [nuevaGranjaNombre, setNuevaGranjaNombre] = useState("")
   const [guardando, setGuardando] = useState(false)
@@ -69,6 +70,7 @@ export function GalponesView() {
     setCodigo("")
     setNombre("")
     setCapacidad("")
+    setEficienciaPorcentaje("")
     setGranjaId("")
     setError(null)
   }
@@ -78,6 +80,7 @@ export function GalponesView() {
     setCodigo(g.codigo)
     setNombre(g.nombre)
     setCapacidad(g.capacidad?.toString() ?? "")
+    setEficienciaPorcentaje(g.eficiencia_porcentaje?.toString() ?? "")
     setGranjaId(g.granja_id?.toString() ?? "")
     setError(null)
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -106,6 +109,7 @@ export function GalponesView() {
       codigo: codigo.trim(),
       nombre: nombre.trim(),
       capacidad: capacidad ? Number(capacidad) : null,
+      eficienciaPorcentaje: eficienciaPorcentaje ? Number(eficienciaPorcentaje) : null,
       granjaId: granjaId ? Number(granjaId) : null,
     }
 
@@ -174,6 +178,19 @@ export function GalponesView() {
                 onChange={(e) => setCapacidad(e.target.value)}
                 placeholder="10000"
               />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="eficiencia">% Eficiencia esperada</Label>
+              <Input
+                id="eficiencia"
+                type="number"
+                value={eficienciaPorcentaje}
+                onChange={(e) => setEficienciaPorcentaje(e.target.value)}
+                placeholder="90"
+              />
+              <p className="text-xs text-muted-foreground">
+                Mínimo esperado de recolección diaria = aves activas del galpón × este %. Se usa en Historial diario.
+              </p>
             </div>
             <div className="flex flex-col gap-2">
               <Label>Granja</Label>
@@ -255,6 +272,7 @@ export function GalponesView() {
                   <TableHead>Nombre</TableHead>
                   <TableHead>Granja</TableHead>
                   <TableHead className="text-right">Capacidad</TableHead>
+                  <TableHead className="text-right">% Eficiencia</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -267,6 +285,9 @@ export function GalponesView() {
                     <TableCell>{g.granja_nombre ?? "—"}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {g.capacidad != null ? g.capacidad.toLocaleString("es-CO") : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {g.eficiencia_porcentaje != null ? `${g.eficiencia_porcentaje}%` : "—"}
                     </TableCell>
                     <TableCell>
                       <EstadoBadge estado={g.activo ? "activo" : "inactivo"} label={g.activo ? "Activo" : "Inactivo"} />
