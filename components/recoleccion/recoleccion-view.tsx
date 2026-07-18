@@ -22,8 +22,8 @@ import { listarAnaquelesPorBodega, crearAnaquel, type Anaquel } from "@/lib/anaq
 
 const TIPOS_AVERIA: { value: TipoAveria; label: string }[] = [
   { value: "picado", label: "Picados" },
-  { value: "roto", label: "Rotos" },
-  { value: "partido", label: "Partidos" },
+  { value: "roto_sin_recuperar", label: "Rotos sin recuperar" },
+  { value: "roto_con_yema", label: "Rotos con yema" },
 ]
 
 // Indicador de paso numerado — guía al recolector en orden, con mínima
@@ -52,7 +52,7 @@ export function RecoleccionView() {
   const [anaquelId, setAnaquelId] = useState("")
   const [nuevoAnaquelCodigo, setNuevoAnaquelCodigo] = useState("")
   const [cantidades, setCantidades] = useState<Record<number, string>>({})
-  const [averias, setAverias] = useState<Record<TipoAveria, string>>({ picado: "", roto: "", partido: "" })
+  const [averias, setAverias] = useState<Record<TipoAveria, string>>({ picado: "", roto_sin_recuperar: "", roto_con_yema: "" })
 
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -101,7 +101,7 @@ export function RecoleccionView() {
     setBodegaId("")
     setAnaquelId("")
     setCantidades({})
-    setAverias({ picado: "", roto: "", partido: "" })
+    setAverias({ picado: "", roto_sin_recuperar: "", roto_con_yema: "" })
   }
 
   async function onRegistrar() {

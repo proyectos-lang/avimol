@@ -104,3 +104,36 @@ export const groups: GrupoNav[] = [
     modules: [{ label: "Indicadores", href: "/indicadores", icon: BarChart3 }],
   },
 ]
+
+export interface ModuloResuelto {
+  grupoKey: string
+  grupoTitulo: string
+  tint: string
+  modulo: ModuloNav
+}
+
+// Resuelve a qué módulo del nav corresponde una ruta, con match por
+// prefijo más largo (para que "/aves/indicadores" gane sobre "/aves").
+// Devuelve null para rutas que no son un módulo de nivel superior — p.
+// ej. detalles con id (/cargue/123) o el inicio (/). Se usa para montar
+// la banda de insights una sola vez en el layout.
+export function resolverModuloPorRuta(pathname: string): ModuloResuelto | null {
+  let mejor: ModuloResuelto | null = null
+  let mejorLargo = -1
+
+  for (const grupo of groups) {
+    for (const modulo of grupo.modules) {
+      const esExacto = pathname === modulo.href
+      const esPrefijo = pathname.startsWith(modulo.href + "/")
+      if ((esExacto || esPrefijo) && modulo.href.length > mejorLargo) {
+        mejor = { grupoKey: grupo.key, grupoTitulo: grupo.title, tint: grupo.tint, modulo }
+        mejorLargo = modulo.href.length
+      }
+    }
+  }
+
+  // Solo mostramos la banda en la página exacta del módulo, no en sus
+  // sub-rutas de detalle (p. ej. /cargue/123 no debe heredar la de /cargue).
+  if (mejor && pathname !== mejor.modulo.href) return null
+  return mejor
+}

@@ -22,6 +22,7 @@ export function DescargueDetalleView({ ordenId }: { ordenId: number }) {
   const [procesando, setProcesando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cantidadesRecibidas, setCantidadesRecibidas] = useState<Record<number, string>>({})
+  const [cartonesRecibidos, setCartonesRecibidos] = useState("")
 
   async function cargar() {
     setCargando(true)
@@ -33,6 +34,7 @@ export function DescargueDetalleView({ ordenId }: { ordenId: number }) {
         iniciales[linea.id] = (linea.cantidad_recibida ?? linea.cantidad_cargada).toString()
       }
       setCantidadesRecibidas(iniciales)
+      setCartonesRecibidos((o.cartones_recibidos ?? o.cartones_cargados ?? 0).toString())
     }
     setCargando(false)
   }
@@ -64,7 +66,11 @@ export function DescargueDetalleView({ ordenId }: { ordenId: number }) {
       cantidadRecibida: Number(cantidadesRecibidas[d.id] ?? 0),
     }))
 
-    const resultado = await confirmarFinDescargue(ordenId, lineas)
+    const resultado = await confirmarFinDescargue(
+      ordenId,
+      lineas,
+      orden!.cartones_cargados ? Number(cartonesRecibidos) || 0 : undefined,
+    )
     setProcesando(false)
 
     if (!resultado.success) {
@@ -146,6 +152,27 @@ export function DescargueDetalleView({ ordenId }: { ordenId: number }) {
           </div>
         </CardContent>
       </Card>
+
+      {!!orden.cartones_cargados && (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle className="text-base">Cartones</CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between gap-2">
+            <span className="text-sm text-muted-foreground">Cargado: {orden.cartones_cargados.toLocaleString("es-CO")}</span>
+            {puedeConfirmar ? (
+              <Input
+                type="number"
+                className="w-32"
+                value={cartonesRecibidos}
+                onChange={(e) => setCartonesRecibidos(e.target.value)}
+              />
+            ) : (
+              <span className="text-sm font-semibold">{(orden.cartones_recibidos ?? "—").toString()} recibidos</span>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 

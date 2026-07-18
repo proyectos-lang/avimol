@@ -23,8 +23,8 @@ import { listarReferenciasHuevo, type ReferenciaHuevo, type TipoAveria } from "@
 
 const TIPOS_AVERIA: { value: TipoAveria; label: string }[] = [
   { value: "picado", label: "Picados" },
-  { value: "roto", label: "Rotos" },
-  { value: "partido", label: "Partidos" },
+  { value: "roto_sin_recuperar", label: "Rotos sin recuperar" },
+  { value: "roto_con_yema", label: "Rotos con yema" },
 ]
 
 const HUEVOS_POR_CARTON = 30
@@ -58,7 +58,7 @@ export function ClasificacionView() {
   const [itemSeleccionado, setItemSeleccionado] = useState<ItemInventarioSinClasificar | null>(null)
   const [cantidadEntrada, setCantidadEntrada] = useState("")
   const [salidas, setSalidas] = useState<Record<number, { cantidad: string; anaquelId: string }>>({})
-  const [averias, setAverias] = useState<Record<TipoAveria, string>>({ picado: "", roto: "", partido: "" })
+  const [averias, setAverias] = useState<Record<TipoAveria, string>>({ picado: "", roto_sin_recuperar: "", roto_con_yema: "" })
   const [cartonesDisponibles, setCartonesDisponibles] = useState(0)
   const [cartonesExtra, setCartonesExtra] = useState<Record<MotivoCartonExtra, string>>({
     refuerzo_buenos: "",
@@ -124,7 +124,7 @@ export function ClasificacionView() {
     setItemSeleccionado(null)
     setCantidadEntrada("")
     setSalidas({})
-    setAverias({ picado: "", roto: "", partido: "" })
+    setAverias({ picado: "", roto_sin_recuperar: "", roto_con_yema: "" })
     setCartonesExtra({ refuerzo_buenos: "", rotos: "", averiados: "" })
     setObservacionCartones("")
   }
@@ -133,7 +133,7 @@ export function ClasificacionView() {
     setItemSeleccionado(item)
     setCantidadEntrada(item.cantidad_disponible.toString())
     setSalidas({})
-    setAverias({ picado: "", roto: "", partido: "" })
+    setAverias({ picado: "", roto_sin_recuperar: "", roto_con_yema: "" })
     setCartonesExtra({ refuerzo_buenos: "", rotos: "", averiados: "" })
     setObservacionCartones("")
     setError(null)

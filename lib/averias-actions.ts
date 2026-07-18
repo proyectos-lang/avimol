@@ -107,7 +107,9 @@ export async function registrarProcesamientoYemas(
 
   const { data: averias, error: errorAverias } = await db
     .from("averias_huevo")
-    .select("id, etapa, procesamiento_yema_id, estado, orden_cargue_id, ordenes_cargue(bodega_id)")
+    .select(
+      "id, etapa, tipo_averia, procesamiento_yema_id, estado, orden_cargue_id, ordenes_cargue(bodega_id), clasificaciones(bodega_id), lotes_huevo(bodega_id)",
+    )
     .in("id", averiaIds)
 
   if (errorAverias || !averias) {
@@ -115,8 +117,8 @@ export async function registrarProcesamientoYemas(
   }
 
   for (const a of averias as any[]) {
-    if (a.etapa !== "recepcion") {
-      return { success: false, message: "Solo se pueden procesar averías de recepción" }
+    if (a.tipo_averia !== "roto_con_yema") {
+      return { success: false, message: "Solo se pueden procesar averías de tipo 'Roto con yema'" }
     }
     if (a.procesamiento_yema_id != null) {
       return { success: false, message: "Una o más averías ya fueron procesadas" }
@@ -124,7 +126,8 @@ export async function registrarProcesamientoYemas(
     if (a.estado === "rechazada") {
       return { success: false, message: "No se pueden procesar averías rechazadas" }
     }
-    if (a.ordenes_cargue?.bodega_id !== bodegaId) {
+    const bodegaAveria = a.ordenes_cargue?.bodega_id ?? a.clasificaciones?.bodega_id ?? a.lotes_huevo?.bodega_id ?? null
+    if (bodegaAveria !== bodegaId) {
       return { success: false, message: "Todas las averías deben pertenecer a la misma bodega" }
     }
   }

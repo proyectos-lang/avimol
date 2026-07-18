@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Eye, RefreshCw, Store } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -44,6 +45,7 @@ export function VentasView() {
   const [clienteId, setClienteId] = useState("")
   const [cantidades, setCantidades] = useState<Record<number, string>>({})
   const [precios, setPrecios] = useState<Record<number, string>>({})
+  const [cartonesUsados, setCartonesUsados] = useState("")
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -120,6 +122,7 @@ export function VentasView() {
       bodegaId: Number(bodegaId),
       clienteId: clienteId ? Number(clienteId) : null,
       lineas,
+      cartonesUsados: cartonesUsados ? Number(cartonesUsados) : undefined,
     })
     setGuardando(false)
 
@@ -135,6 +138,7 @@ export function VentasView() {
     })
     setCantidades({})
     setPrecios({})
+    setCartonesUsados("")
     obtenerInventarioDisponiblePorBodega(Number(bodegaId)).then(setInventario)
     listarVentasDirectas().then(setVentas)
   }
@@ -212,6 +216,16 @@ export function VentasView() {
                 )}
               </div>
             )}
+
+            <div className="flex flex-col gap-2">
+              <Label>Cartones usados (opcional)</Label>
+              <Input
+                type="number"
+                value={cartonesUsados}
+                onChange={(e) => setCartonesUsados(e.target.value)}
+                placeholder="0"
+              />
+            </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 

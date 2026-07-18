@@ -51,6 +51,7 @@ export interface DatosVentaDirecta {
   bodegaId: number
   clienteId: number | null
   lineas: { referenciaId: number; cantidad: number; precioUnitario: number | null }[]
+  cartonesUsados?: number
 }
 
 export async function crearVentaDirecta(
@@ -171,6 +172,40 @@ export async function crearVentaDirecta(
       referencia_huevo_id: asignacion.referenciaId,
       tipo_movimiento: "salida_venta_directa",
       cantidad: -asignacion.cantidad,
+      venta_directa_id: venta.id,
+      usuario_id: usuario?.id ?? null,
+      creado_en: fechaHoraColombiaISO(),
+    })
+  }
+
+  // Consumo de cartones en la venta: cantidad manual (el vendedor la
+  // escribe, no se calcula automático como en Clasificación).
+  if (datos.cartonesUsados && datos.cartonesUsados > 0) {
+    const { data: saldoCarton, error: errorSaldoCarton } = await db
+      .from("inventario_cartones")
+      .select("id, cantidad_disponible")
+      .eq("bodega_id", datos.bodegaId)
+      .maybeSingle()
+
+    if (errorSaldoCarton || !saldoCarton || saldoCarton.cantidad_disponible < datos.cartonesUsados) {
+      return {
+        success: false,
+        message: `No hay suficientes cartones en esta bodega (disponibles: ${saldoCarton?.cantidad_disponible ?? 0}, necesarios: ${datos.cartonesUsados})`,
+      }
+    }
+
+    await db
+      .from("inventario_cartones")
+      .update({
+        cantidad_disponible: saldoCarton.cantidad_disponible - datos.cartonesUsados,
+        actualizado_en: fechaHoraColombiaISO(),
+      })
+      .eq("id", saldoCarton.id)
+
+    await db.from("movimientos_cartones").insert({
+      bodega_id: datos.bodegaId,
+      tipo_movimiento: "salida_venta",
+      cantidad: -datos.cartonesUsados,
       venta_directa_id: venta.id,
       usuario_id: usuario?.id ?? null,
       creado_en: fechaHoraColombiaISO(),

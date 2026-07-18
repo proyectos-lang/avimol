@@ -18,8 +18,11 @@ export interface AveriaProduccionFila {
   galponId: number | null
   galponCodigo: string | null
   galponNombre: string | null
+  bodegaId: number | null
+  bodegaNombre: string | null
   fecha: string
   observaciones: string | null
+  procesadaEnYemas: boolean
   estado: string
 }
 
@@ -35,8 +38,8 @@ export async function listarAveriasProduccion(filtros: {
   let query = db
     .from("averias_huevo")
     .select(
-      `id, etapa, tipo_averia, cantidad, fecha, observaciones, estado,
-       lotes_huevo(codigo, galpon_id, galpones(codigo, nombre)),
+      `id, etapa, tipo_averia, cantidad, fecha, observaciones, estado, procesamiento_yema_id,
+       lotes_huevo(codigo, galpon_id, bodega_id, galpones(codigo, nombre), bodegas(nombre)),
        referencias_huevo(nombre)`,
     )
     .in("etapa", ["recoleccion", "clasificacion"])
@@ -61,8 +64,11 @@ export async function listarAveriasProduccion(filtros: {
     galponId: fila.lotes_huevo?.galpon_id ?? null,
     galponCodigo: fila.lotes_huevo?.galpones?.codigo ?? null,
     galponNombre: fila.lotes_huevo?.galpones?.nombre ?? null,
+    bodegaId: fila.lotes_huevo?.bodega_id ?? null,
+    bodegaNombre: fila.lotes_huevo?.bodegas?.nombre ?? null,
     fecha: fila.fecha,
     observaciones: fila.observaciones,
+    procesadaEnYemas: fila.procesamiento_yema_id != null,
     estado: fila.estado,
   }))
 

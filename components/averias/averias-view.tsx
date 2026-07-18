@@ -18,13 +18,12 @@ import { EstadoBadge } from "@/components/ui/estado-badge"
 import { formatearFechaHoraColombia } from "@/lib/date-utils"
 import { listarBodegas, type Bodega } from "@/lib/bodegas-actions"
 import { listarAverias, registrarProcesamientoYemas, type AveriaFila } from "@/lib/averias-actions"
+import { TIPO_AVERIA_LABEL } from "@/lib/estado-labels"
 
 const ETAPAS = [
   { value: "despacho", label: "Despacho" },
   { value: "recepcion", label: "Recepción" },
 ]
-
-const TIPO_LABEL: Record<string, string> = { picado: "Picado", roto: "Roto", partido: "Partido" }
 const ESTADO_AVERIA_LABEL: Record<string, string> = {
   pendiente: "Pendiente",
   aprobada: "Aprobada",
@@ -66,7 +65,7 @@ export function AveriasView() {
   }, [bodegaId, etapa])
 
   const seleccionables = useMemo(
-    () => averias.filter((a) => a.etapa === "recepcion" && !a.procesadaEnYemas),
+    () => averias.filter((a) => a.tipoAveria === "roto_con_yema" && !a.procesadaEnYemas),
     [averias],
   )
 
@@ -211,7 +210,7 @@ export function AveriasView() {
                   <TableCell>{a.bodegaNombre ?? "—"}</TableCell>
                   <TableCell>{a.loteHuevoCodigo}</TableCell>
                   <TableCell>{a.referenciaNombre ?? "—"}</TableCell>
-                  <TableCell>{TIPO_LABEL[a.tipoAveria] ?? a.tipoAveria}</TableCell>
+                  <TableCell>{TIPO_AVERIA_LABEL[a.tipoAveria as keyof typeof TIPO_AVERIA_LABEL] ?? a.tipoAveria}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
                     {a.cantidad.toLocaleString("es-CO")}
                   </TableCell>

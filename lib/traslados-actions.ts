@@ -62,13 +62,14 @@ export interface DatosSolicitudTraslado {
   bodegaOrigenId: number
   bodegaDestinoId: number
   lineas: { referenciaId: number; cantidad: number; edadSemanasPreferida?: number | null }[]
+  cartonesSolicitados?: number
 }
 
 export async function crearSolicitudTraslado(
   datos: DatosSolicitudTraslado,
 ): Promise<{ success: boolean; message?: string; codigo?: string; ordenCargueId?: number }> {
   const lineasValidas = datos.lineas.filter((l) => l.cantidad > 0)
-  if (lineasValidas.length === 0) {
+  if (lineasValidas.length === 0 && !datos.cartonesSolicitados) {
     return { success: false, message: "Registra al menos una cantidad mayor a cero" }
   }
   if (datos.bodegaOrigenId === datos.bodegaDestinoId) {
@@ -85,6 +86,7 @@ export async function crearSolicitudTraslado(
       codigo,
       bodega_origen_id: datos.bodegaOrigenId,
       bodega_destino_id: datos.bodegaDestinoId,
+      cartones_solicitados: datos.cartonesSolicitados ?? null,
       estado: "pendiente",
       usuario_id: usuario?.id ?? null,
     })
@@ -211,9 +213,12 @@ export interface OrdenCargueCompleta {
   peso_total_kg: number | null
   valor_tarifa_aplicado: number | null
   orden_cargue_origen_id: number | null
+  cartones_cargados: number | null
+  cartones_recibidos: number | null
   solicitud: {
     id: number
     codigo: string
+    cartonesSolicitados: number | null
     lineas: {
       referenciaId: number
       referenciaNombre: string
@@ -236,7 +241,7 @@ export async function obtenerOrdenConDetalle(ordenId: number): Promise<OrdenCarg
   const { data: orden, error: errorOrden } = await db
     .from("ordenes_cargue")
     .select(
-      "id, codigo, tipo_operacion, estado, bodega_id, placa_vehiculo, conductor, hora_llegada_vehiculo, hora_inicio_cargue, hora_fin_cargue, hora_inicio_descargue, hora_fin_descargue, peso_total_kg, valor_tarifa_aplicado, orden_cargue_origen_id, bodegas(nombre, tipo), solicitud_traslado_id, pedido_id",
+      "id, codigo, tipo_operacion, estado, bodega_id, placa_vehiculo, conductor, hora_llegada_vehiculo, hora_inicio_cargue, hora_fin_cargue, hora_inicio_descargue, hora_fin_descargue, peso_total_kg, valor_tarifa_aplicado, orden_cargue_origen_id, cartones_cargados, cartones_recibidos, bodegas(nombre, tipo), solicitud_traslado_id, pedido_id",
     )
     .eq("id", ordenId)
     .single()
@@ -250,7 +255,7 @@ export async function obtenerOrdenConDetalle(ordenId: number): Promise<OrdenCarg
   if (orden.solicitud_traslado_id) {
     const { data: sol } = await db
       .from("solicitudes_traslado")
-      .select("id, codigo")
+      .select("id, codigo, cartones_solicitados")
       .eq("id", orden.solicitud_traslado_id)
       .single()
 
@@ -263,6 +268,7 @@ export async function obtenerOrdenConDetalle(ordenId: number): Promise<OrdenCarg
       solicitud = {
         id: sol.id,
         codigo: sol.codigo,
+        cartonesSolicitados: sol.cartones_solicitados ?? null,
         lineas: (lineas ?? []).map((l: any) => ({
           referenciaId: l.referencia_huevo_id,
           referenciaNombre: l.referencias_huevo?.nombre ?? "",
@@ -327,6 +333,8 @@ export async function obtenerOrdenConDetalle(ordenId: number): Promise<OrdenCarg
     peso_total_kg: orden.peso_total_kg,
     valor_tarifa_aplicado: orden.valor_tarifa_aplicado,
     orden_cargue_origen_id: orden.orden_cargue_origen_id,
+    cartones_cargados: orden.cartones_cargados,
+    cartones_recibidos: orden.cartones_recibidos,
     solicitud,
     pedido,
     detalle: (detalleData ?? []).map((fila: any) => ({
@@ -538,6 +546,50 @@ export async function quitarLineaCargue(detalleId: number): Promise<{ success: b
   return { success: true }
 }
 
+// Fija cuántos cartones lleva esta orden de cargue de traslado — no es una
+// línea de detalle como el huevo (los cartones no se lotean), es una sola
+// cantidad suelta en la orden. El descuento real del inventario pasa al
+// cerrar el cargue (confirmarFinCargue), acá solo se guarda la intención
+// y se valida el saldo de forma informativa.
+export async function actualizarCartonesCargue(
+  ordenId: number,
+  cantidad: number,
+): Promise<{ success: boolean; message?: string }> {
+  if (cantidad < 0) return { success: false, message: "La cantidad no puede ser negativa" }
+
+  const db = getAvimolDb()
+  const { data: orden, error: errorOrden } = await db
+    .from("ordenes_cargue")
+    .select("bodega_id, hora_fin_cargue")
+    .eq("id", ordenId)
+    .maybeSingle()
+
+  if (errorOrden || !orden) return { success: false, message: "Orden no encontrada" }
+  if (orden.hora_fin_cargue) return { success: false, message: "Esta orden ya fue finalizada" }
+
+  if (cantidad > 0) {
+    const { data: saldo } = await db
+      .from("inventario_cartones")
+      .select("cantidad_disponible")
+      .eq("bodega_id", orden.bodega_id)
+      .maybeSingle()
+
+    if (!saldo || saldo.cantidad_disponible < cantidad) {
+      return {
+        success: false,
+        message: `No hay suficientes cartones en esta bodega (disponibles: ${saldo?.cantidad_disponible ?? 0})`,
+      }
+    }
+  }
+
+  const { error } = await db.from("ordenes_cargue").update({ cartones_cargados: cantidad }).eq("id", ordenId)
+  if (error) {
+    console.error("[avimol] Error actualizando cartones del cargue:", error)
+    return { success: false, message: "No se pudo actualizar: " + error.message }
+  }
+  return { success: true }
+}
+
 // Anula una orden de cargue (traslado o despacho) que todavía no ha
 // finalizado — segura porque agregarLineaCargue nunca descuenta
 // inventario real (solo lo hace confirmarFinCargue/confirmarFinDespacho
@@ -647,7 +699,43 @@ export async function confirmarFinCargue(
 
   const orden = await obtenerOrdenConDetalle(ordenId)
   if (!orden) return { success: false, message: "Orden no encontrada" }
-  if (orden.detalle.length === 0) return { success: false, message: "Agrega al menos una línea de cargue" }
+  if (orden.detalle.length === 0 && !orden.cartones_cargados) {
+    return { success: false, message: "Agrega al menos una línea de cargue" }
+  }
+
+  // Cartones: se descuentan de la bodega origen igual que el huevo, pero
+  // como cantidad suelta (sin lote/anaquel) — ver actualizarCartonesCargue.
+  if (orden.cartones_cargados && orden.cartones_cargados > 0) {
+    const { data: saldoCarton } = await db
+      .from("inventario_cartones")
+      .select("id, cantidad_disponible")
+      .eq("bodega_id", orden.bodega_id)
+      .maybeSingle()
+
+    if (!saldoCarton || saldoCarton.cantidad_disponible < orden.cartones_cargados) {
+      return {
+        success: false,
+        message: `No hay suficientes cartones en la bodega origen (disponibles: ${saldoCarton?.cantidad_disponible ?? 0})`,
+      }
+    }
+
+    await db
+      .from("inventario_cartones")
+      .update({
+        cantidad_disponible: saldoCarton.cantidad_disponible - orden.cartones_cargados,
+        actualizado_en: fechaHoraColombiaISO(),
+      })
+      .eq("id", saldoCarton.id)
+
+    await db.from("movimientos_cartones").insert({
+      bodega_id: orden.bodega_id,
+      tipo_movimiento: "salida_traslado",
+      cantidad: -orden.cartones_cargados,
+      orden_cargue_id: ordenId,
+      usuario_id: usuario?.id ?? null,
+      creado_en: fechaHoraColombiaISO(),
+    })
+  }
 
   // Descontar inventario de la bodega origen y dejar rastro en el kardex.
   for (const linea of orden.detalle) {
@@ -705,6 +793,7 @@ export async function confirmarFinCargue(
         solicitud_traslado_id: orden.solicitud!.id,
         orden_cargue_origen_id: ordenId,
         codigo: codigoDescargue,
+        cartones_cargados: orden.cartones_cargados,
         estado: "pendiente",
       })
       .select("id")
@@ -885,8 +974,10 @@ export interface LineaRecepcion {
 export async function confirmarFinDescargue(
   ordenId: number,
   lineas: LineaRecepcion[],
+  cartonesRecibidos?: number,
 ): Promise<{ success: boolean; message?: string }> {
   const db = getAvimolDb()
+  const usuario = await obtenerUsuarioActual()
 
   const orden = await obtenerOrdenConDetalle(ordenId)
   if (!orden) return { success: false, message: "Orden no encontrada" }
@@ -899,6 +990,43 @@ export async function confirmarFinDescargue(
       .from("ordenes_cargue_detalle")
       .update({ cantidad_recibida: recibida.cantidadRecibida })
       .eq("id", linea.id)
+  }
+
+  // Los cartones no pasan por Recepciones → Clasificar (no tienen ese
+  // paso de clasificación como el huevo) — se acreditan directo acá.
+  if (orden.cartones_cargados && orden.cartones_cargados > 0) {
+    const cantidad = cartonesRecibidos ?? orden.cartones_cargados
+
+    await db.from("ordenes_cargue").update({ cartones_recibidos: cantidad }).eq("id", ordenId)
+
+    if (cantidad > 0) {
+      const { data: saldoCarton } = await db
+        .from("inventario_cartones")
+        .select("id, cantidad_disponible")
+        .eq("bodega_id", orden.bodega_id)
+        .maybeSingle()
+
+      if (saldoCarton) {
+        await db
+          .from("inventario_cartones")
+          .update({
+            cantidad_disponible: saldoCarton.cantidad_disponible + cantidad,
+            actualizado_en: fechaHoraColombiaISO(),
+          })
+          .eq("id", saldoCarton.id)
+      } else {
+        await db.from("inventario_cartones").insert({ bodega_id: orden.bodega_id, cantidad_disponible: cantidad })
+      }
+
+      await db.from("movimientos_cartones").insert({
+        bodega_id: orden.bodega_id,
+        tipo_movimiento: "entrada_traslado",
+        cantidad,
+        orden_cargue_id: ordenId,
+        usuario_id: usuario?.id ?? null,
+        creado_en: fechaHoraColombiaISO(),
+      })
+    }
   }
 
   const tarifa = await obtenerTarifaVigente()

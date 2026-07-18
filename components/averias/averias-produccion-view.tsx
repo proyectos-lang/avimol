@@ -1,25 +1,31 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { AlertTriangle, RefreshCw } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { AlertTriangle, Droplet, RefreshCw } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PageHeader } from "@/components/ui/page-header"
 import { StatChip } from "@/components/ui/stat-chip"
 import { EmptyState } from "@/components/ui/empty-state"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { EstadoBadge } from "@/components/ui/estado-badge"
 import { formatearFechaHoraColombia } from "@/lib/date-utils"
 import { listarGalpones, type Galpon } from "@/lib/galpones-actions"
 import { listarAveriasProduccion, type AveriaProduccionFila } from "@/lib/averias-produccion-actions"
+import { registrarProcesamientoYemas } from "@/lib/averias-actions"
+import { TIPO_AVERIA_LABEL } from "@/lib/estado-labels"
 
 const ETAPAS = [
   { value: "recoleccion", label: "Recolección" },
   { value: "clasificacion", label: "Clasificación" },
 ]
 
-const TIPO_LABEL: Record<string, string> = { picado: "Picado", roto: "Roto", partido: "Partido" }
 const ESTADO_AVERIA_LABEL: Record<string, string> = {
   pendiente: "Pendiente",
   aprobada: "Aprobada",
@@ -32,6 +38,13 @@ export function AveriasProduccionView() {
   const [cargando, setCargando] = useState(true)
   const [galponId, setGalponId] = useState("todos")
   const [etapa, setEtapa] = useState("todas")
+  const [seleccionadas, setSeleccionadas] = useState<Set<number>>(new Set())
+
+  const [dialogoAbierto, setDialogoAbierto] = useState(false)
+  const [cantidadYemas, setCantidadYemas] = useState("")
+  const [observacion, setObservacion] = useState("")
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function cargarDatos() {
     setCargando(true)
@@ -44,6 +57,7 @@ export function AveriasProduccionView() {
     ])
     setGalpones(g)
     setAverias(a)
+    setSeleccionadas(new Set())
     setCargando(false)
   }
 
@@ -52,13 +66,69 @@ export function AveriasProduccionView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [galponId, etapa])
 
+  const seleccionables = useMemo(
+    () => averias.filter((a) => a.tipoAveria === "roto_con_yema" && !a.procesadaEnYemas),
+    [averias],
+  )
+
+  const bodegaSeleccionUnica = useMemo(() => {
+    const ids = new Set(Array.from(seleccionadas).map((id) => averias.find((a) => a.id === id)?.bodegaId))
+    return ids.size === 1 ? Array.from(ids)[0] ?? null : null
+  }, [seleccionadas, averias])
+
+  function toggleSeleccion(fila: AveriaProduccionFila) {
+    setSeleccionadas((prev) => {
+      const next = new Set(prev)
+      if (next.has(fila.id)) {
+        next.delete(fila.id)
+      } else {
+        next.add(fila.id)
+      }
+      return next
+    })
+  }
+
+  async function onRegistrarProcesamiento() {
+    if (!bodegaSeleccionUnica) {
+      setError("Selecciona averías de una sola bodega")
+      return
+    }
+    const cantidad = Number(cantidadYemas)
+    if (!cantidad || cantidad <= 0) {
+      setError("Registra la cantidad de yemas obtenidas")
+      return
+    }
+    setGuardando(true)
+    setError(null)
+    const resultado = await registrarProcesamientoYemas(
+      bodegaSeleccionUnica,
+      Array.from(seleccionadas),
+      cantidad,
+      observacion.trim() || null,
+    )
+    setGuardando(false)
+
+    if (!resultado.success) {
+      setError(resultado.message ?? "Error al registrar el procesamiento")
+      toast.error(resultado.message ?? "Error al registrar el procesamiento")
+      return
+    }
+
+    toast.success(`Procesamiento de ${cantidad} yemas registrado`)
+    setDialogoAbierto(false)
+    setCantidadYemas("")
+    setObservacion("")
+    cargarDatos()
+  }
+
   return (
     <div>
       <PageHeader
         titulo="Averías de producción"
-        subtitulo="Picados, rotos y partidos de recolección y clasificación, por galpón — las de despacho/recepción se manejan en Bodegas y logística → Averías"
+        subtitulo="Picados, rotos sin recuperar y rotos con yema de recolección y clasificación, por galpón — las de despacho/recepción se manejan en Bodegas y logística → Averías"
       >
         <StatChip icono={AlertTriangle} label="Averías" valor={averias.length} />
+        <StatChip icono={Droplet} label="Pendientes de procesar yema" valor={seleccionables.length} />
       </PageHeader>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -93,6 +163,15 @@ export function AveriasProduccionView() {
         </Button>
       </div>
 
+      {seleccionadas.size > 0 && (
+        <div className="mb-4 flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 px-4 py-2.5">
+          <p className="text-sm font-medium">{seleccionadas.size} avería(s) seleccionada(s)</p>
+          <Button size="sm" onClick={() => setDialogoAbierto(true)}>
+            Registrar procesamiento de yemas
+          </Button>
+        </div>
+      )}
+
       {cargando ? (
         <div className="flex flex-col gap-2">
           <Skeleton className="h-10 w-full" />
@@ -108,6 +187,7 @@ export function AveriasProduccionView() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10"></TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Origen</TableHead>
                 <TableHead>Galpón</TableHead>
@@ -122,12 +202,17 @@ export function AveriasProduccionView() {
             <TableBody>
               {averias.map((a) => (
                 <TableRow key={a.id}>
+                  <TableCell>
+                    {seleccionables.some((s) => s.id === a.id) && (
+                      <Checkbox checked={seleccionadas.has(a.id)} onCheckedChange={() => toggleSeleccion(a)} />
+                    )}
+                  </TableCell>
                   <TableCell>{formatearFechaHoraColombia(a.fecha)}</TableCell>
                   <TableCell className="font-medium">{a.origenLabel}</TableCell>
                   <TableCell>{a.galponCodigo ? `${a.galponCodigo} — ${a.galponNombre}` : "—"}</TableCell>
                   <TableCell>{a.loteHuevoCodigo}</TableCell>
                   <TableCell>{a.referenciaNombre ?? "—"}</TableCell>
-                  <TableCell>{TIPO_LABEL[a.tipoAveria] ?? a.tipoAveria}</TableCell>
+                  <TableCell>{TIPO_AVERIA_LABEL[a.tipoAveria as keyof typeof TIPO_AVERIA_LABEL] ?? a.tipoAveria}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
                     {a.cantidad.toLocaleString("es-CO")}
                   </TableCell>
@@ -141,6 +226,34 @@ export function AveriasProduccionView() {
           </Table>
         </div>
       )}
+
+      <Dialog open={dialogoAbierto} onOpenChange={setDialogoAbierto}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Registrar procesamiento de yemas</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground">{seleccionadas.size} avería(s) seleccionada(s)</p>
+            <div className="flex flex-col gap-2">
+              <Label>Cantidad de yemas obtenidas</Label>
+              <Input
+                type="number"
+                value={cantidadYemas}
+                onChange={(e) => setCantidadYemas(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Observación (opcional)</Label>
+              <Input value={observacion} onChange={(e) => setObservacion(e.target.value)} placeholder="Opcional" />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button onClick={onRegistrarProcesamiento} disabled={guardando}>
+              {guardando ? "Registrando..." : "Registrar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

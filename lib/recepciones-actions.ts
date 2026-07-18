@@ -190,9 +190,9 @@ export async function listarRecepcionesPendientesClasificar(): Promise<Recepcion
 export interface LineaClasificacionAveria {
   detalleId: number
   buenos: number
-  rotos: number
+  rotosSinRecuperar: number
   picados: number
-  partidos: number
+  rotosConYema: number
 }
 
 // Reparte lo recibido en cada línea entre bueno/roto/picado/partido: los
@@ -228,7 +228,7 @@ export async function confirmarClasificacionRecepcion(
   for (const l of lineas) {
     const d = detallePorId.get(l.detalleId)
     if (!d) return { success: false, message: "Línea de recepción no encontrada" }
-    const suma = l.buenos + l.rotos + l.picados + l.partidos
+    const suma = l.buenos + l.rotosSinRecuperar + l.picados + l.rotosConYema
     if (suma !== (d.cantidad_recibida ?? 0)) {
       return {
         success: false,
@@ -282,9 +282,9 @@ export async function confirmarClasificacionRecepcion(
     }
 
     const averiasLinea: { tipo_averia: string; cantidad: number }[] = []
-    if (l.rotos > 0) averiasLinea.push({ tipo_averia: "roto", cantidad: l.rotos })
+    if (l.rotosSinRecuperar > 0) averiasLinea.push({ tipo_averia: "roto_sin_recuperar", cantidad: l.rotosSinRecuperar })
     if (l.picados > 0) averiasLinea.push({ tipo_averia: "picado", cantidad: l.picados })
-    if (l.partidos > 0) averiasLinea.push({ tipo_averia: "partido", cantidad: l.partidos })
+    if (l.rotosConYema > 0) averiasLinea.push({ tipo_averia: "roto_con_yema", cantidad: l.rotosConYema })
 
     if (averiasLinea.length > 0) {
       await db.from("averias_huevo").insert(

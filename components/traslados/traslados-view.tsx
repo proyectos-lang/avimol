@@ -41,6 +41,7 @@ export function TrasladosView() {
   const [cantidades, setCantidades] = useState<Record<number, string>>({})
   const [edadesPreferidas, setEdadesPreferidas] = useState<Record<number, string>>({})
   const [lotesPreview, setLotesPreview] = useState<Record<number, LoteDisponible[]>>({})
+  const [cartonesSolicitados, setCartonesSolicitados] = useState("")
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -115,6 +116,7 @@ export function TrasladosView() {
     setBodegaDestinoId("")
     setCantidades({})
     setEdadesPreferidas({})
+    setCartonesSolicitados("")
     setError(null)
   }
 
@@ -132,7 +134,8 @@ export function TrasladosView() {
       }))
       .filter((l) => l.cantidad > 0)
 
-    if (lineas.length === 0) {
+    const cartones = Number(cartonesSolicitados) || 0
+    if (lineas.length === 0 && cartones <= 0) {
       setError("Registra al menos una cantidad mayor a cero")
       return
     }
@@ -144,6 +147,7 @@ export function TrasladosView() {
       bodegaOrigenId: Number(bodegaOrigenId),
       bodegaDestinoId: Number(bodegaDestinoId),
       lineas,
+      cartonesSolicitados: cartones > 0 ? cartones : undefined,
     })
     setGuardando(false)
 
@@ -276,6 +280,16 @@ export function TrasladosView() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label>Cartones solicitados (opcional)</Label>
+              <Input
+                type="number"
+                value={cartonesSolicitados}
+                onChange={(e) => setCartonesSolicitados(e.target.value)}
+                placeholder="0"
+              />
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}

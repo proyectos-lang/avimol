@@ -70,7 +70,7 @@ export function IndicadoresClasificacionTab({ filtros }: { filtros: FiltrosIndic
       </div>
 
       <p className="mb-2 text-sm font-semibold">
-        Buenos, picados, rotos y partidos por galpón y color <span className="font-normal text-muted-foreground">(la avería de clasificación no distingue talla)</span>
+        Buenos, picados, rotos sin recuperar y rotos con yema por galpón y color <span className="font-normal text-muted-foreground">(la avería de clasificación no distingue talla)</span>
       </p>
       <div className="overflow-x-auto rounded-lg border border-border">
         <Table>
@@ -80,8 +80,8 @@ export function IndicadoresClasificacionTab({ filtros }: { filtros: FiltrosIndic
               <TableHead>Color</TableHead>
               <TableHead className="text-right">Buenos</TableHead>
               <TableHead className="text-right">Picados</TableHead>
-              <TableHead className="text-right">Rotos</TableHead>
-              <TableHead className="text-right">Partidos</TableHead>
+              <TableHead className="text-right">Rotos sin recuperar</TableHead>
+              <TableHead className="text-right">Rotos con yema</TableHead>
               <TableHead className="text-right">Total averías</TableHead>
               <TableHead className="text-right">% averías</TableHead>
             </TableRow>
@@ -102,8 +102,8 @@ export function IndicadoresClasificacionTab({ filtros }: { filtros: FiltrosIndic
                   <TableCell>{a.colorNombre}</TableCell>
                   <TableCell className="text-right tabular-nums">{a.buenos.toLocaleString("es-CO")}</TableCell>
                   <TableCell className="text-right tabular-nums">{a.picado.toLocaleString("es-CO")}</TableCell>
-                  <TableCell className="text-right tabular-nums">{a.roto.toLocaleString("es-CO")}</TableCell>
-                  <TableCell className="text-right tabular-nums">{a.partido.toLocaleString("es-CO")}</TableCell>
+                  <TableCell className="text-right tabular-nums">{a.rotoSinRecuperar.toLocaleString("es-CO")}</TableCell>
+                  <TableCell className="text-right tabular-nums">{a.rotoConYema.toLocaleString("es-CO")}</TableCell>
                   <TableCell className="text-right tabular-nums font-semibold">{a.totalAverias.toLocaleString("es-CO")}</TableCell>
                   <TableCell className="text-right tabular-nums">{a.porcentajeAverias}%</TableCell>
                 </TableRow>

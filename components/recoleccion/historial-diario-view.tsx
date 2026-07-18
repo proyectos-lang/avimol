@@ -16,8 +16,7 @@ import { formatearFechaColombia, formatearFechaHoraColombia } from "@/lib/date-u
 import { listarRecoleccionPorDia, type RecoleccionDia } from "@/lib/recoleccion-actions"
 import { listarLotesHuevoPorGalponYFecha, type LoteDelDia } from "@/lib/lotes-huevo-actions"
 import { actualizarEstadoAveria } from "@/lib/averias-actions"
-
-const TIPO_AVERIA_LABEL: Record<string, string> = { picado: "Picado", roto: "Roto", partido: "Partido" }
+import { TIPO_AVERIA_LABEL } from "@/lib/estado-labels"
 
 export function HistorialDiarioView() {
   const [filas, setFilas] = useState<RecoleccionDia[]>([])
@@ -111,8 +110,8 @@ export function HistorialDiarioView() {
                 <TableHead className="text-right">Esperado (mín.)</TableHead>
                 <TableHead className="text-right">Total recolectado</TableHead>
                 <TableHead className="text-right">Picados</TableHead>
-                <TableHead className="text-right">Rotos</TableHead>
-                <TableHead className="text-right">Partidos</TableHead>
+                <TableHead className="text-right">Rotos sin recuperar</TableHead>
+                <TableHead className="text-right">Rotos con yema</TableHead>
                 <TableHead className="text-right">Total averías</TableHead>
                 <TableHead className="text-right">Ver</TableHead>
               </TableRow>
@@ -141,10 +140,10 @@ export function HistorialDiarioView() {
                     {f.averia_picado > 0 ? f.averia_picado.toLocaleString("es-CO") : "—"}
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
-                    {f.averia_roto > 0 ? f.averia_roto.toLocaleString("es-CO") : "—"}
+                    {f.averia_roto_sin_recuperar > 0 ? f.averia_roto_sin_recuperar.toLocaleString("es-CO") : "—"}
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
-                    {f.averia_partido > 0 ? f.averia_partido.toLocaleString("es-CO") : "—"}
+                    {f.averia_roto_con_yema > 0 ? f.averia_roto_con_yema.toLocaleString("es-CO") : "—"}
                   </TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
                     {f.total_averias > 0 ? f.total_averias.toLocaleString("es-CO") : "—"}
@@ -231,7 +230,7 @@ export function HistorialDiarioView() {
                           l.averias.map((a) => (
                             <TableRow key={a.id}>
                               <TableCell>{l.codigo}</TableCell>
-                              <TableCell>{TIPO_AVERIA_LABEL[a.tipoAveria] ?? a.tipoAveria}</TableCell>
+                              <TableCell>{TIPO_AVERIA_LABEL[a.tipoAveria as keyof typeof TIPO_AVERIA_LABEL] ?? a.tipoAveria}</TableCell>
                               <TableCell className="text-right tabular-nums">
                                 {a.cantidad.toLocaleString("es-CO")}
                               </TableCell>

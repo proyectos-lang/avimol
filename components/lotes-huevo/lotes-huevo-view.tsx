@@ -13,6 +13,7 @@ import { StatChip } from "@/components/ui/stat-chip"
 import { EmptyState } from "@/components/ui/empty-state"
 import { SearchInput } from "@/components/ui/search-input"
 import { formatearFechaColombia } from "@/lib/date-utils"
+import { TIPO_AVERIA_LABEL } from "@/lib/estado-labels"
 import {
   listarLotesHuevo,
   obtenerDetalleLoteHuevo,
@@ -163,8 +164,8 @@ export function LotesHuevoView() {
                   <div className="flex flex-col gap-1">
                     {averias.map((a, i) => (
                       <div key={i} className="flex justify-between rounded-md border border-border px-3 py-2">
-                        <span className="capitalize">
-                          {a.tipo_averia}
+                        <span>
+                          {TIPO_AVERIA_LABEL[a.tipo_averia as keyof typeof TIPO_AVERIA_LABEL] ?? a.tipo_averia}
                           {a.referencia_nombre && ` · ${a.referencia_nombre}`}
                           <span className="text-muted-foreground"> ({a.etapa})</span>
                         </span>

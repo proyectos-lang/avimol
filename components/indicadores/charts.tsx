@@ -72,17 +72,18 @@ export function ProduccionPorGalponChart({ datos }: { datos: { galponCodigo: str
   )
 }
 
-// Aquí sí hay 3 series reales (picado/roto/partido) — color categórico
-// legítimo, orden fijo, con leyenda (obligatoria desde 2 series).
+// Aquí sí hay 3 series reales (picado/roto sin recuperar/roto con yema) —
+// color categórico legítimo, orden fijo, con leyenda (obligatoria desde
+// 2 series).
 export function AveriasPorEtapaChart({
   datos,
 }: {
-  datos: { etapa: string; picado: number; roto: number; partido: number }[]
+  datos: { etapa: string; picado: number; roto_sin_recuperar: number; roto_con_yema: number }[]
 }) {
   const config: ChartConfig = {
     picado: { label: "Picado", color: "var(--viz-1)" },
-    roto: { label: "Roto", color: "var(--viz-2)" },
-    partido: { label: "Partido", color: "var(--viz-3)" },
+    roto_sin_recuperar: { label: "Roto sin recuperar", color: "var(--viz-2)" },
+    roto_con_yema: { label: "Roto con yema", color: "var(--viz-3)" },
   }
 
   if (datos.length === 0) {
@@ -98,8 +99,8 @@ export function AveriasPorEtapaChart({
         <ChartTooltip content={<ChartTooltipContent />} />
         <Legend />
         <Bar dataKey="picado" stackId="a" fill="var(--color-picado)" radius={[0, 0, 0, 0]} />
-        <Bar dataKey="roto" stackId="a" fill="var(--color-roto)" radius={[0, 0, 0, 0]} />
-        <Bar dataKey="partido" stackId="a" fill="var(--color-partido)" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="roto_sin_recuperar" stackId="a" fill="var(--color-roto_sin_recuperar)" radius={[0, 0, 0, 0]} />
+        <Bar dataKey="roto_con_yema" stackId="a" fill="var(--color-roto_con_yema)" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ChartContainer>
   )

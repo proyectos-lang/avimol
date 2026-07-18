@@ -68,8 +68,8 @@ export interface AveriaRecoleccionPorGalpon {
   galponNombre: string
   buenos: number
   picado: number
-  roto: number
-  partido: number
+  rotoSinRecuperar: number
+  rotoConYema: number
   totalAverias: number
   porcentajeAverias: number
 }
@@ -81,8 +81,8 @@ export interface IndicadoresRecoleccion {
   totalRecolectado: number
   totalBuenos: number
   totalPicado: number
-  totalRoto: number
-  totalPartido: number
+  totalRotoSinRecuperar: number
+  totalRotoConYema: number
   totalAverias: number
   porcentajeAveriasTotal: number
 }
@@ -94,8 +94,8 @@ const INDICADORES_RECOLECCION_VACIO: IndicadoresRecoleccion = {
   totalRecolectado: 0,
   totalBuenos: 0,
   totalPicado: 0,
-  totalRoto: 0,
-  totalPartido: 0,
+  totalRotoSinRecuperar: 0,
+  totalRotoConYema: 0,
   totalAverias: 0,
   porcentajeAveriasTotal: 0,
 }
@@ -174,16 +174,16 @@ export async function obtenerIndicadoresRecoleccion(filtros: FiltrosIndicadores)
         galponNombre: g.galponNombre,
         buenos: g.cantidad,
         picado: 0,
-        roto: 0,
-        partido: 0,
+        rotoSinRecuperar: 0,
+        rotoConYema: 0,
         totalAverias: 0,
         porcentajeAverias: 0,
       },
     ]),
   )
   let totalPicado = 0
-  let totalRoto = 0
-  let totalPartido = 0
+  let totalRotoSinRecuperar = 0
+  let totalRotoConYema = 0
 
   for (const fila of (averias ?? []) as any[]) {
     const galpon = fila.lotes_huevo?.galpones
@@ -195,20 +195,20 @@ export async function obtenerIndicadoresRecoleccion(filtros: FiltrosIndicadores)
       galponNombre: galpon.nombre,
       buenos: porGalponMap.get(galpon.id)?.cantidad ?? 0,
       picado: 0,
-      roto: 0,
-      partido: 0,
+      rotoSinRecuperar: 0,
+      rotoConYema: 0,
       totalAverias: 0,
       porcentajeAverias: 0,
     }
     if (fila.tipo_averia === "picado") {
       a.picado += fila.cantidad
       totalPicado += fila.cantidad
-    } else if (fila.tipo_averia === "roto") {
-      a.roto += fila.cantidad
-      totalRoto += fila.cantidad
-    } else if (fila.tipo_averia === "partido") {
-      a.partido += fila.cantidad
-      totalPartido += fila.cantidad
+    } else if (fila.tipo_averia === "roto_sin_recuperar") {
+      a.rotoSinRecuperar += fila.cantidad
+      totalRotoSinRecuperar += fila.cantidad
+    } else if (fila.tipo_averia === "roto_con_yema") {
+      a.rotoConYema += fila.cantidad
+      totalRotoConYema += fila.cantidad
     }
     a.totalAverias += fila.cantidad
     a.buenos = Math.max(0, (porGalponMap.get(galpon.id)?.cantidad ?? 0) - a.totalAverias)
@@ -220,7 +220,7 @@ export async function obtenerIndicadoresRecoleccion(filtros: FiltrosIndicadores)
     a.porcentajeAverias = recolectadoGalpon > 0 ? Math.round((a.totalAverias / recolectadoGalpon) * 1000) / 10 : 0
   }
 
-  const totalAverias = totalPicado + totalRoto + totalPartido
+  const totalAverias = totalPicado + totalRotoSinRecuperar + totalRotoConYema
   const totalBuenos = Math.max(0, totalRecolectado - totalAverias)
 
   return {
@@ -230,8 +230,8 @@ export async function obtenerIndicadoresRecoleccion(filtros: FiltrosIndicadores)
     totalRecolectado,
     totalBuenos,
     totalPicado,
-    totalRoto,
-    totalPartido,
+    totalRotoSinRecuperar,
+    totalRotoConYema,
     totalAverias,
     porcentajeAveriasTotal: totalRecolectado > 0 ? Math.round((totalAverias / totalRecolectado) * 1000) / 10 : 0,
   }
@@ -258,8 +258,8 @@ export interface AveriaClasificacionPorGalponYColor {
   colorNombre: string
   buenos: number
   picado: number
-  roto: number
-  partido: number
+  rotoSinRecuperar: number
+  rotoConYema: number
   totalAverias: number
   porcentajeAverias: number
 }
@@ -270,8 +270,8 @@ export interface IndicadoresClasificacion {
   totalClasificado: number
   totalBuenos: number
   totalPicado: number
-  totalRoto: number
-  totalPartido: number
+  totalRotoSinRecuperar: number
+  totalRotoConYema: number
   totalAverias: number
   porcentajeAveriasTotal: number
 }
@@ -282,8 +282,8 @@ const INDICADORES_CLASIFICACION_VACIO: IndicadoresClasificacion = {
   totalClasificado: 0,
   totalBuenos: 0,
   totalPicado: 0,
-  totalRoto: 0,
-  totalPartido: 0,
+  totalRotoSinRecuperar: 0,
+  totalRotoConYema: 0,
   totalAverias: 0,
   porcentajeAveriasTotal: 0,
 }
@@ -371,22 +371,22 @@ export async function obtenerIndicadoresClasificacion(filtros: FiltrosIndicadore
     console.error("[avimol] Error obteniendo averías de clasificación:", errorAverias)
   }
 
-  const averiasPorClasificacion = new Map<number, { picado: number; roto: number; partido: number; total: number }>()
+  const averiasPorClasificacion = new Map<number, { picado: number; rotoSinRecuperar: number; rotoConYema: number; total: number }>()
   let totalPicado = 0
-  let totalRoto = 0
-  let totalPartido = 0
+  let totalRotoSinRecuperar = 0
+  let totalRotoConYema = 0
 
   for (const fila of (averias ?? []) as any[]) {
-    const acc = averiasPorClasificacion.get(fila.clasificacion_id) ?? { picado: 0, roto: 0, partido: 0, total: 0 }
+    const acc = averiasPorClasificacion.get(fila.clasificacion_id) ?? { picado: 0, rotoSinRecuperar: 0, rotoConYema: 0, total: 0 }
     if (fila.tipo_averia === "picado") {
       acc.picado += fila.cantidad
       totalPicado += fila.cantidad
-    } else if (fila.tipo_averia === "roto") {
-      acc.roto += fila.cantidad
-      totalRoto += fila.cantidad
-    } else if (fila.tipo_averia === "partido") {
-      acc.partido += fila.cantidad
-      totalPartido += fila.cantidad
+    } else if (fila.tipo_averia === "roto_sin_recuperar") {
+      acc.rotoSinRecuperar += fila.cantidad
+      totalRotoSinRecuperar += fila.cantidad
+    } else if (fila.tipo_averia === "roto_con_yema") {
+      acc.rotoConYema += fila.cantidad
+      totalRotoConYema += fila.cantidad
     }
     acc.total += fila.cantidad
     averiasPorClasificacion.set(fila.clasificacion_id, acc)
@@ -396,7 +396,7 @@ export async function obtenerIndicadoresClasificacion(filtros: FiltrosIndicadore
 
   for (const [clasifId, info] of clasifPorId.entries()) {
     if (!info.galpon) continue
-    const acc = averiasPorClasificacion.get(clasifId) ?? { picado: 0, roto: 0, partido: 0, total: 0 }
+    const acc = averiasPorClasificacion.get(clasifId) ?? { picado: 0, rotoSinRecuperar: 0, rotoConYema: 0, total: 0 }
 
     const clave = `${info.galpon.id}__${info.colorId}`
     const existente = averiasPorGalponYColorMap.get(clave) ?? {
@@ -407,15 +407,15 @@ export async function obtenerIndicadoresClasificacion(filtros: FiltrosIndicadore
       colorNombre: info.colorNombre,
       buenos: 0,
       picado: 0,
-      roto: 0,
-      partido: 0,
+      rotoSinRecuperar: 0,
+      rotoConYema: 0,
       totalAverias: 0,
       porcentajeAverias: 0,
     }
     existente.buenos += Math.max(0, info.cantidadEntrada - acc.total)
     existente.picado += acc.picado
-    existente.roto += acc.roto
-    existente.partido += acc.partido
+    existente.rotoSinRecuperar += acc.rotoSinRecuperar
+    existente.rotoConYema += acc.rotoConYema
     existente.totalAverias += acc.total
     averiasPorGalponYColorMap.set(clave, existente)
   }
@@ -425,7 +425,7 @@ export async function obtenerIndicadoresClasificacion(filtros: FiltrosIndicadore
     a.porcentajeAverias = entradaGrupo > 0 ? Math.round((a.totalAverias / entradaGrupo) * 1000) / 10 : 0
   }
 
-  const totalAverias = totalPicado + totalRoto + totalPartido
+  const totalAverias = totalPicado + totalRotoSinRecuperar + totalRotoConYema
   const totalBuenos = Math.max(0, totalClasificado - totalAverias)
 
   return {
@@ -434,8 +434,8 @@ export async function obtenerIndicadoresClasificacion(filtros: FiltrosIndicadore
     totalClasificado,
     totalBuenos,
     totalPicado,
-    totalRoto,
-    totalPartido,
+    totalRotoSinRecuperar,
+    totalRotoConYema,
     totalAverias,
     porcentajeAveriasTotal: totalClasificado > 0 ? Math.round((totalAverias / totalClasificado) * 1000) / 10 : 0,
   }

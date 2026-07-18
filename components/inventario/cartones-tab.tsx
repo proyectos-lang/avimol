@@ -12,7 +12,7 @@ import { StatChip } from "@/components/ui/stat-chip"
 import { EmptyState } from "@/components/ui/empty-state"
 import { FormCard } from "@/components/ui/form-card"
 import { formatearFechaHoraColombia } from "@/lib/date-utils"
-import { listarBodegasClasificadoras, type Bodega } from "@/lib/bodegas-actions"
+import { listarBodegas, type Bodega } from "@/lib/bodegas-actions"
 import {
   listarInventarioCartones,
   registrarIngresoCarton,
@@ -32,6 +32,9 @@ const TIPO_MOVIMIENTO_LABEL: Record<string, string> = {
   entrada_manual: "Entrada manual",
   salida_clasificacion: "Salida por clasificación",
   ajuste: "Ajuste",
+  salida_venta: "Salida por venta",
+  salida_traslado: "Salida por traslado",
+  entrada_traslado: "Entrada por traslado",
 }
 
 export function CartonesTab() {
@@ -52,7 +55,7 @@ export function CartonesTab() {
   async function cargarDatos() {
     const idBodega = bodegaId === "todas" ? null : Number(bodegaId)
     const [b, inv, costo, cons, movs] = await Promise.all([
-      listarBodegasClasificadoras(),
+      listarBodegas(true),
       listarInventarioCartones(idBodega),
       obtenerCostoCartonVigente(),
       listarConsumoCartones(idBodega),
@@ -118,7 +121,7 @@ export function CartonesTab() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="todas">Todas las clasificadoras</SelectItem>
+            <SelectItem value="todas">Todas las bodegas</SelectItem>
             {bodegas.map((b) => (
               <SelectItem key={b.id} value={b.id.toString()}>
                 {b.nombre}
@@ -205,6 +208,10 @@ export function CartonesTab() {
                         <>
                           {m.clasificacionCodigo} · Calculados {m.cartonesCalculados} · Extra {m.cartonesExtra}
                         </>
+                      ) : m.ventaDirectaCodigo ? (
+                        `Venta ${m.ventaDirectaCodigo}`
+                      ) : m.ordenCargueCodigo ? (
+                        `Traslado ${m.ordenCargueCodigo}`
                       ) : (
                         m.observaciones ?? "—"
                       )}

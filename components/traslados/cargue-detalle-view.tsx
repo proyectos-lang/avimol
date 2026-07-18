@@ -32,6 +32,7 @@ import {
   confirmarFinCargue,
   evaluarCierreOrdenCargue,
   anularOrdenCargue,
+  actualizarCartonesCargue,
   type OrdenCargueCompleta,
   type LoteDisponible,
   type AccionCierreCargue,
@@ -58,7 +59,7 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
   const [disponibilidadPedido, setDisponibilidadPedido] = useState<DisponibilidadLineaPedido[]>([])
 
   const [detalleAveriaId, setDetalleAveriaId] = useState("")
-  const [tipoAveriaDespacho, setTipoAveriaDespacho] = useState<TipoAveria>("roto")
+  const [tipoAveriaDespacho, setTipoAveriaDespacho] = useState<TipoAveria>("picado")
   const [cantidadAveriaDespacho, setCantidadAveriaDespacho] = useState("")
   const [averiaGuardada, setAveriaGuardada] = useState(false)
 
@@ -66,10 +67,14 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
   const [progresoCierre, setProgresoCierre] = useState<{ completo: boolean; lineas: LineaProgresoCargue[] } | null>(null)
   const [dialogoAnularAbierto, setDialogoAnularAbierto] = useState(false)
 
+  const [cartonesInput, setCartonesInput] = useState("")
+  const [guardandoCartones, setGuardandoCartones] = useState(false)
+
   async function cargar() {
     setCargando(true)
     const o = await obtenerOrdenConDetalle(ordenId)
     setOrden(o)
+    setCartonesInput((o?.cartones_cargados ?? 0).toString())
     if (!o?.hora_llegada_vehiculo) {
       setLlegadasDisponibles(await listarLlegadasDisponibles())
     }
@@ -147,6 +152,18 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
 
   async function onQuitarLinea(detalleId: number) {
     await quitarLineaCargue(detalleId)
+    cargar()
+  }
+
+  async function onGuardarCartones() {
+    setError(null)
+    setGuardandoCartones(true)
+    const resultado = await actualizarCartonesCargue(ordenId, Number(cartonesInput) || 0)
+    setGuardandoCartones(false)
+    if (!resultado.success) {
+      setError(resultado.message ?? "Error al actualizar los cartones")
+      return
+    }
     cargar()
   }
 
@@ -237,7 +254,8 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
   const tieneVehiculo = !!orden.hora_llegada_vehiculo
   const yaFinalizado = !!orden.hora_fin_cargue
   const puedeEditarPicking = !yaFinalizado
-  const puedeFinalizar = orden.detalle.length > 0 && tieneVehiculo && !yaFinalizado
+  const tieneCartones = !!orden.cartones_cargados && orden.cartones_cargados > 0
+  const puedeFinalizar = (orden.detalle.length > 0 || tieneCartones) && tieneVehiculo && !yaFinalizado
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -258,6 +276,38 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
                 <span className="font-semibold">{l.cantidadSolicitada.toLocaleString("es-CO")} solicitados</span>
               </div>
             ))}
+            {!!orden.solicitud.cartonesSolicitados && (
+              <div className="flex justify-between">
+                <span>Cartones</span>
+                <span className="font-semibold">{orden.solicitud.cartonesSolicitados.toLocaleString("es-CO")} solicitados</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {!esDespacho && (puedeEditarPicking || tieneCartones) && (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle className="text-base">Cartones a cargar</CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center gap-2">
+            {puedeEditarPicking ? (
+              <>
+                <Input
+                  type="number"
+                  className="w-32"
+                  value={cartonesInput}
+                  onChange={(e) => setCartonesInput(e.target.value)}
+                  placeholder="0"
+                />
+                <Button variant="outline" onClick={onGuardarCartones} disabled={guardandoCartones}>
+                  {guardandoCartones ? "Guardando..." : "Actualizar"}
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">{orden.cartones_cargados?.toLocaleString("es-CO")} cargados</p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -519,8 +569,8 @@ export function CargueDetalleView({ ordenId }: { ordenId: number }) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="picado">Picado</SelectItem>
-                  <SelectItem value="roto">Roto</SelectItem>
-                  <SelectItem value="partido">Partido</SelectItem>
+                  <SelectItem value="roto_sin_recuperar">Roto sin recuperar</SelectItem>
+                  <SelectItem value="roto_con_yema">Roto con yema</SelectItem>
                 </SelectContent>
               </Select>
               <Input

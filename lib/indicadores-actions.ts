@@ -209,8 +209,8 @@ export interface AveriasPorTipo {
 export interface AveriasPorEtapaYTipo {
   etapa: string
   picado: number
-  roto: number
-  partido: number
+  roto_sin_recuperar: number
+  roto_con_yema: number
 }
 
 export async function obtenerAverias(): Promise<{
@@ -240,9 +240,9 @@ export async function obtenerAverias(): Promise<{
     porEtapaMap.set(fila.etapa, (porEtapaMap.get(fila.etapa) ?? 0) + fila.cantidad)
     porTipoMap.set(fila.tipo_averia, (porTipoMap.get(fila.tipo_averia) ?? 0) + fila.cantidad)
 
-    const cruce = porEtapaYTipoMap.get(fila.etapa) ?? { etapa: fila.etapa, picado: 0, roto: 0, partido: 0 }
-    if (fila.tipo_averia === "picado" || fila.tipo_averia === "roto" || fila.tipo_averia === "partido") {
-      cruce[fila.tipo_averia as "picado" | "roto" | "partido"] += fila.cantidad
+    const cruce = porEtapaYTipoMap.get(fila.etapa) ?? { etapa: fila.etapa, picado: 0, roto_sin_recuperar: 0, roto_con_yema: 0 }
+    if (fila.tipo_averia === "picado" || fila.tipo_averia === "roto_sin_recuperar" || fila.tipo_averia === "roto_con_yema") {
+      cruce[fila.tipo_averia as "picado" | "roto_sin_recuperar" | "roto_con_yema"] += fila.cantidad
     }
     porEtapaYTipoMap.set(fila.etapa, cruce)
   }

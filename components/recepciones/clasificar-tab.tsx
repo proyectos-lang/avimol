@@ -18,13 +18,18 @@ import {
 
 interface FormLinea {
   buenos: string
-  rotos: string
+  rotosSinRecuperar: string
   picados: string
-  partidos: string
+  rotosConYema: string
 }
 
 function sumaLinea(f: FormLinea): number {
-  return (Number(f.buenos) || 0) + (Number(f.rotos) || 0) + (Number(f.picados) || 0) + (Number(f.partidos) || 0)
+  return (
+    (Number(f.buenos) || 0) +
+    (Number(f.rotosSinRecuperar) || 0) +
+    (Number(f.picados) || 0) +
+    (Number(f.rotosConYema) || 0)
+  )
 }
 
 export function ClasificarTab() {
@@ -44,9 +49,9 @@ export function ClasificarTab() {
         for (const l of r.lineas) {
           siguiente[r.ordenId][l.detalleId] = prev[r.ordenId]?.[l.detalleId] ?? {
             buenos: "",
-            rotos: "",
+            rotosSinRecuperar: "",
             picados: "",
-            partidos: "",
+            rotosConYema: "",
           }
         }
       }
@@ -73,7 +78,7 @@ export function ClasificarTab() {
     const formOrden = formularios[recepcion.ordenId] ?? {}
 
     for (const l of recepcion.lineas) {
-      const f = formOrden[l.detalleId] ?? { buenos: "", rotos: "", picados: "", partidos: "" }
+      const f = formOrden[l.detalleId] ?? { buenos: "", rotosSinRecuperar: "", picados: "", rotosConYema: "" }
       if (sumaLinea(f) !== l.cantidadRecibida) {
         toast.error(`"${l.referenciaNombre}": la clasificación debe sumar exactamente lo recibido (${l.cantidadRecibida})`)
         return
@@ -84,13 +89,13 @@ export function ClasificarTab() {
     const resultado = await confirmarClasificacionRecepcion(
       recepcion.ordenId,
       recepcion.lineas.map((l) => {
-        const f = formOrden[l.detalleId] ?? { buenos: "", rotos: "", picados: "", partidos: "" }
+        const f = formOrden[l.detalleId] ?? { buenos: "", rotosSinRecuperar: "", picados: "", rotosConYema: "" }
         return {
           detalleId: l.detalleId,
           buenos: Number(f.buenos) || 0,
-          rotos: Number(f.rotos) || 0,
+          rotosSinRecuperar: Number(f.rotosSinRecuperar) || 0,
           picados: Number(f.picados) || 0,
-          partidos: Number(f.partidos) || 0,
+          rotosConYema: Number(f.rotosConYema) || 0,
         }
       }),
     )
@@ -148,15 +153,15 @@ export function ClasificarTab() {
                           <TableHead>Referencia</TableHead>
                           <TableHead className="text-right">Recibido</TableHead>
                           <TableHead>Buenos</TableHead>
-                          <TableHead>Rotos</TableHead>
+                          <TableHead>Rotos sin recuperar</TableHead>
                           <TableHead>Picados</TableHead>
-                          <TableHead>Partidos</TableHead>
+                          <TableHead>Rotos con yema</TableHead>
                           <TableHead className="text-right">Suma</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {r.lineas.map((l) => {
-                          const f = formOrden[l.detalleId] ?? { buenos: "", rotos: "", picados: "", partidos: "" }
+                          const f = formOrden[l.detalleId] ?? { buenos: "", rotosSinRecuperar: "", picados: "", rotosConYema: "" }
                           const suma = sumaLinea(f)
                           const cuadra = suma === l.cantidadRecibida
                           return (
@@ -178,8 +183,8 @@ export function ClasificarTab() {
                                 <Input
                                   type="number"
                                   className="w-20"
-                                  value={f.rotos}
-                                  onChange={(e) => actualizarLinea(r.ordenId, l.detalleId, "rotos", e.target.value)}
+                                  value={f.rotosSinRecuperar}
+                                  onChange={(e) => actualizarLinea(r.ordenId, l.detalleId, "rotosSinRecuperar", e.target.value)}
                                 />
                               </TableCell>
                               <TableCell>
@@ -194,8 +199,8 @@ export function ClasificarTab() {
                                 <Input
                                   type="number"
                                   className="w-20"
-                                  value={f.partidos}
-                                  onChange={(e) => actualizarLinea(r.ordenId, l.detalleId, "partidos", e.target.value)}
+                                  value={f.rotosConYema}
+                                  onChange={(e) => actualizarLinea(r.ordenId, l.detalleId, "rotosConYema", e.target.value)}
                                 />
                               </TableCell>
                               <TableCell

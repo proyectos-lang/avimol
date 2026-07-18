@@ -101,7 +101,7 @@ async function generarCodigoLoteHuevo(fecha: string): Promise<string> {
 }
 
 export type OrigenRecoleccion = "app_movil" | "manual_clasificadora"
-export type TipoAveria = "picado" | "roto" | "partido"
+export type TipoAveria = "picado" | "roto_sin_recuperar" | "roto_con_yema"
 
 export interface DatosRecoleccion {
   galponId: number
@@ -221,8 +221,8 @@ export interface RecoleccionDia {
   galpon_nombre: string
   total_recolectado: number
   averia_picado: number
-  averia_roto: number
-  averia_partido: number
+  averia_roto_sin_recuperar: number
+  averia_roto_con_yema: number
   total_averias: number
   aves_activas: number
   eficiencia_porcentaje: number | null
@@ -267,8 +267,8 @@ export async function listarRecoleccionPorDia(): Promise<RecoleccionDia[]> {
         galpon_nombre: galpon.nombre,
         total_recolectado: fila.cantidad,
         averia_picado: 0,
-        averia_roto: 0,
-        averia_partido: 0,
+        averia_roto_sin_recuperar: 0,
+        averia_roto_con_yema: 0,
         total_averias: 0,
         aves_activas: 0,
         eficiencia_porcentaje: null,
@@ -305,8 +305,8 @@ export async function listarRecoleccionPorDia(): Promise<RecoleccionDia[]> {
         galpon_nombre: galpon.nombre,
         total_recolectado: 0,
         averia_picado: 0,
-        averia_roto: 0,
-        averia_partido: 0,
+        averia_roto_sin_recuperar: 0,
+        averia_roto_con_yema: 0,
         total_averias: 0,
         aves_activas: 0,
         eficiencia_porcentaje: null,
@@ -317,8 +317,8 @@ export async function listarRecoleccionPorDia(): Promise<RecoleccionDia[]> {
     }
 
     if (fila.tipo_averia === "picado") grupo.averia_picado += fila.cantidad
-    else if (fila.tipo_averia === "roto") grupo.averia_roto += fila.cantidad
-    else if (fila.tipo_averia === "partido") grupo.averia_partido += fila.cantidad
+    else if (fila.tipo_averia === "roto_sin_recuperar") grupo.averia_roto_sin_recuperar += fila.cantidad
+    else if (fila.tipo_averia === "roto_con_yema") grupo.averia_roto_con_yema += fila.cantidad
     grupo.total_averias += fila.cantidad
   }
 

@@ -1,0 +1,45 @@
+import {
+  Bird,
+  Egg,
+  Warehouse,
+  Gauge,
+  CalendarClock,
+  Boxes,
+  AlertTriangle,
+  CheckCircle2,
+  PackageCheck,
+  Car,
+  DollarSign,
+  ShoppingCart,
+  Users,
+  BarChart3,
+  Droplet,
+  Store,
+  Truck,
+  Layers,
+  type LucideIcon,
+} from "lucide-react"
+import type { IconoKey } from "@/lib/insights-tipos"
+
+// Registro cliente: resuelve la clave de ícono (string, serializable) que
+// devuelve la server action a un componente real de lucide.
+export const ICONOS: Record<IconoKey, LucideIcon> = {
+  bird: Bird,
+  egg: Egg,
+  warehouse: Warehouse,
+  gauge: Gauge,
+  edad: CalendarClock,
+  cartones: Boxes,
+  alerta: AlertTriangle,
+  ok: CheckCircle2,
+  recepcion: PackageCheck,
+  vehiculo: Car,
+  dinero: DollarSign,
+  pedido: ShoppingCart,
+  cliente: Users,
+  chart: BarChart3,
+  gota: Droplet,
+  tienda: Store,
+  camion: Truck,
+  sinClasificar: Layers,
+}

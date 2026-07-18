@@ -167,12 +167,14 @@ export interface MovimientoCarton {
   clasificacionCodigo: string | null
   cartonesCalculados: number | null
   cartonesExtra: number | null
+  ventaDirectaCodigo: string | null
+  ordenCargueCodigo: string | null
 }
 
 // Kardex completo de cartones (entradas manuales + salidas por
-// clasificación + ajustes) filtrado por bodega — a diferencia de
-// listarConsumoCartones, que solo mira las salidas derivadas del
-// proceso de clasificación.
+// clasificación/venta/traslado + ajustes) filtrado por bodega — a
+// diferencia de listarConsumoCartones, que solo mira las salidas
+// derivadas del proceso de clasificación.
 export async function listarMovimientosCartones(bodegaId: number | null): Promise<MovimientoCarton[]> {
   const db = getAvimolDb()
   let query = db
@@ -180,7 +182,9 @@ export async function listarMovimientosCartones(bodegaId: number | null): Promis
     .select(
       `id, tipo_movimiento, cantidad, costo_unitario, observaciones, creado_en,
        bodegas(nombre),
-       clasificaciones(codigo, cartones_calculados, cartones_extra)`,
+       clasificaciones(codigo, cartones_calculados, cartones_extra),
+       ventas_directas(codigo),
+       ordenes_cargue(codigo)`,
     )
     .order("creado_en", { ascending: false })
 
@@ -203,6 +207,8 @@ export async function listarMovimientosCartones(bodegaId: number | null): Promis
     clasificacionCodigo: fila.clasificaciones?.codigo ?? null,
     cartonesCalculados: fila.clasificaciones?.cartones_calculados ?? null,
     cartonesExtra: fila.clasificaciones?.cartones_extra ?? null,
+    ventaDirectaCodigo: fila.ventas_directas?.codigo ?? null,
+    ordenCargueCodigo: fila.ordenes_cargue?.codigo ?? null,
   }))
 }
 

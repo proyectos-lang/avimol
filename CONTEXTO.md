@@ -93,6 +93,8 @@ el SQL Editor de Supabase):
 15. **`015_recepciones_averias_yemas.sql`** — `ordenes_cargue.hora_clasificacion_averia`; tablas `procesamientos_yema_averia`, `inventario_yemas`, `movimientos_yemas`; `averias_huevo.procesamiento_yema_id`.
 16. **`016_eficiencia_galpon_estado_averias.sql`** — `galpones.eficiencia_porcentaje`; `averias_huevo.estado` (CHECK `pendiente`/`aprobada`/`rechazada`, default `pendiente`) + `procesada_por`/`procesada_en`.
 17. **`017_indices_indicadores.sql`** — 5 índices (`CREATE INDEX IF NOT EXISTS`) sobre FK sin índice previo (`movimientos_huevo_sin_clasificar.lote_huevo_id`, `clasificaciones.lote_huevo_id`, `clasificaciones_detalle.clasificacion_id`, `averias_huevo.clasificacion_id`, `clasificaciones_cartones_extra.clasificacion_id`) que las nuevas consultas de indicadores por módulo filtran seguido. Solo rendimiento, no cambia datos ni es requisito funcional.
+18. **`019_taxonomia_averias.sql`** — cambia el CHECK de `averias_huevo.tipo_averia` de `picado/roto/partido` a `picado/roto_sin_recuperar/roto_con_yema` y migra las históricas `roto`/`partido` a `roto_sin_recuperar` (quita el CHECK viejo → migra datos → agrega el CHECK nuevo, en ese orden). (No hay `018` — se saltó el número.)
+19. **`020_cartones_venta_traslados.sql`** — amplía el CHECK de `movimientos_cartones.tipo_movimiento` con `salida_venta`/`salida_traslado`/`entrada_traslado`; agrega `movimientos_cartones.venta_directa_id`/`orden_cargue_id`, `solicitudes_traslado.cartones_solicitados`, `ordenes_cargue.cartones_cargados`/`cartones_recibidos` (todo `ADD COLUMN IF NOT EXISTS`, idempotente).
 
 ### Tablas por dominio
 
@@ -474,6 +476,34 @@ No hizo falta migración SQL: crear el bucket es una llamada a la API de Storage
 Verificado con Playwright contra el proyecto de Supabase real: se subió una imagen de prueba a la referencia "A Rojo" y la URL guardada quedó `https://izibxufnaecgtfsjgffd.supabase.co/storage/v1/object/public/avimol/catalogo/1.png?v=...` (bucket `avimol` creado automáticamente); se subió una segunda imagen distinta a la misma referencia y confirmó que sobrescribió el mismo path (`catalogo/1.png`) con un nuevo `?v=`, sin crear un archivo adicional. Sin errores de consola. `npx tsc --noEmit` limpio.
 
 **Nota (Ronda 12):** el bucket `avimol` fue creado en el proyecto de Supabase real durante esta verificación y contiene una imagen de prueba real en `catalogo/1.png` (referencia "A Rojo") — no se revirtió.
+
+### Ronda 13 — Nueva taxonomía de averías + yemas ampliadas + cartones en venta y traslados (2026-07-17)
+Cuatro pedidos del cliente. Requirió 2 migraciones: `019_taxonomia_averias.sql` y `020_cartones_venta_traslados.sql` (ambas idempotentes: `019` primero quita el CHECK viejo, luego migra los datos, luego agrega el CHECK nuevo — el orden importa; `020` usa `ADD COLUMN IF NOT EXISTS`).
+
+**1. Taxonomía de averías** — `tipo_averia` pasó de `picado/roto/partido` a `picado/roto_sin_recuperar/roto_con_yema` (confirmado con el usuario). Las averías históricas `roto`/`partido` se migraron a `roto_sin_recuperar`. El tipo `TipoAveria` (`lib/recoleccion-actions.ts`) y un `TIPO_AVERIA_LABEL` centralizado nuevo en `lib/estado-labels.ts` reemplazan los ~6 mapas de etiqueta duplicados; se tocaron ~20 archivos (4 sitios de inserción, 4 funciones de agregación con campos `picado`/`roto_sin_recuperar`/`roto_con_yema`, y las vistas/charts).
+
+**2. Yemas manuales en cualquier etapa** — `registrarProcesamientoYemas` (`lib/averias-actions.ts`) ya no exige `etapa='recepcion'`; ahora habilita cualquier avería `tipo_averia='roto_con_yema'` (sin importar etapa), y resuelve la bodega con el mismo fallback de `listarAverias`. `components/averias/averias-produccion-view.tsx` ganó el mismo checkbox + diálogo de procesar yemas que ya tenía `averias-view.tsx`.
+
+**3. Cartones en bodega venta** — `crearVentaDirecta` (`lib/ventas-actions.ts`) acepta `cartonesUsados` (cantidad manual): valida saldo, descuenta `inventario_cartones` e inserta `movimientos_cartones` (`tipo_movimiento:'salida_venta'`, con `venta_directa_id`). Input opcional nuevo en `components/ventas/ventas-view.tsx`. El selector de bodega en `cartones-tab.tsx` pasó de `listarBodegasClasificadoras()` a `listarBodegas(true)` para que las bodegas de venta también aparezcan.
+
+**4. Cartones en traslados (misma orden de cargue)** — nuevas columnas `solicitudes_traslado.cartones_solicitados`, `ordenes_cargue.cartones_cargados/cartones_recibidos` (no una tabla de detalle aparte — un cartón no se lotea, es una cantidad suelta por orden). `lib/traslados-actions.ts`: `crearSolicitudTraslado` guarda cartones solicitados; nueva `actualizarCartonesCargue`; `confirmarFinCargue` descuenta cartones del origen (`salida_traslado`) y los copia a la orden de descargue; `confirmarFinDescargue` acredita en destino (`entrada_traslado`) — a diferencia del huevo, los cartones se acreditan directo al descargar (no pasan por Recepciones→Clasificar). Inputs en `traslados-view.tsx`, `cargue-detalle-view.tsx`, `descargue-detalle-view.tsx`.
+
+`npx tsc --noEmit` limpio. **Pendiente**: al momento de esta nota faltaba la verificación Playwright end-to-end (el usuario estaba corriendo `019`/`020`).
+
+### Ronda 14 — Potencia visual: banda de insights por módulo + tablero de mando (2026-07-17)
+El cliente pidió que la app se sienta de alto impacto (Odoo/SAP): iconografía de pollos/huevos y, en la parte superior de cada módulo, una banda resaltada de insights/alertas/información de valor. Decisiones confirmadas: colorido por módulo (Odoo), el inicio se vuelve tablero de mando real, iconografía lucide + CSS (sin imágenes nuevas), alcance = todos los módulos con montaje centralizado. Sin migración.
+
+**Arquitectura (montaje centralizado, sin tocar las 24 vistas):**
+- `components/ui/modulo-hero.tsx` — banda presentacional `rounded-2xl` con degradado del `tint` del grupo + glow radial (mismo lenguaje de `module-cards.tsx`/sidebar), ícono grande de pollo/huevo, fila de KPIs (`tabular-nums font-extrabold`) y pills de alerta (info/advertencia/crítico/ok, clickeables). Respeta `prefers-reduced-motion` y funciona en claro/oscuro (tokens + `color-mix`).
+- `lib/insights-tipos.ts` + `components/insights-iconos.ts` — los íconos viajan como **clave string** (no serializable un componente lucide a través de server→client); el cliente resuelve la clave con el registro `ICONOS`.
+- `lib/insights-actions.ts` — `obtenerInsightsModulo(grupoKey)` (bundles por grupo: aves/cosecha/logistica/comercial/indicadores) y `obtenerInsightsInicio()`, **reutilizando agregaciones ya existentes** (`obtenerIndicadoresAves`, `obtenerIndicadoresRecoleccion`, `listarDashboardRecepciones`, `obtenerVentasPuntoVenta`, etc.) con `Promise.all`.
+- `lib/dashboard-data.ts::resolverModuloPorRuta(pathname)` — match por prefijo más largo; devuelve `null` en detalles con id y en el inicio.
+- `components/modulo-hero-bar.tsx` — montado **una vez** en `app/(app)/layout.tsx` dentro de `<main>`; usa `usePathname()`, resuelve el módulo, pide sus insights y renderiza la banda con skeleton mientras carga. Se auto-oculta en `/`, en `[id]` y en rutas sin módulo.
+- Inicio (`app/(app)/page.tsx` + `components/inicio-hero.tsx`): "Centro de control" con KPIs vivos del negocio (aves activas, recolección del día, ventas del día, ocupación) + alertas cruzadas, arriba del lanzador de módulos (que se conserva).
+
+Cada banda hereda el color del grupo (aves cian, recolección azul, logística verde, comercial ámbar, indicadores naranja). Las StatChips que ya tenían las vistas conviven debajo (banda ejecutiva + área de trabajo, patrón SAP/Odoo — sin regresiones).
+
+Verificado con Playwright contra datos reales: inicio con el tablero de mando (7.397 aves, 1.700 recolectado hoy, $300 ventas hoy, 19.5% ocupación, alertas "12 averías por aprobar" y "1 galpón bajo el mínimo hoy"); bandas por módulo con sus KPIs y color de grupo (Aves cian con 4 galpones activos, Comercial ámbar con ventas del día); confirmado que la banda NO aparece en el inicio (usa su propio hero) ni duplica; render correcto en modo oscuro. `npx tsc --noEmit` limpio. (Nota: hay un warning de "duplicate key" en consola preexistente, ajeno a estos componentes — las listas de la banda usan índices únicos.)
 
 ---
 
