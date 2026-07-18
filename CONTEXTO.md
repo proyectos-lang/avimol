@@ -505,6 +505,19 @@ Cada banda hereda el color del grupo (aves cian, recolección azul, logística v
 
 Verificado con Playwright contra datos reales: inicio con el tablero de mando (7.397 aves, 1.700 recolectado hoy, $300 ventas hoy, 19.5% ocupación, alertas "12 averías por aprobar" y "1 galpón bajo el mínimo hoy"); bandas por módulo con sus KPIs y color de grupo (Aves cian con 4 galpones activos, Comercial ámbar con ventas del día); confirmado que la banda NO aparece en el inicio (usa su propio hero) ni duplica; render correcto en modo oscuro. `npx tsc --noEmit` limpio. (Nota: hay un warning de "duplicate key" en consola preexistente, ajeno a estos componentes — las listas de la banda usan índices únicos.)
 
+### Ronda 15 — Transiciones entre módulos + páginas de grupo con tarjetas (2026-07-18)
+Continuación de la potencia visual: transiciones animadas al navegar y, al entrar a un grupo (desde el sidebar o el inicio), una página del grupo con una tarjeta por módulo con efecto botón al hover. Confirmado con el usuario: entrar al grupo desde el sidebar Y el inicio; transición suave (fundido + leve subida). Sin migración.
+
+**Transición de ruta** — nuevo `app/(app)/template.tsx` (Next re-monta `template.tsx` en cada navegación) que envuelve el contenido en `.page-transition`; keyframe `avimol-page-in` (fundido + `translateY(8px)→0`, 0.28s) en `app/globals.css`. Como `ModuloHeroBar` vive en el layout (fuera del template), la banda persiste y solo el contenido de la página anima — sin parpadeos. Respeta `prefers-reduced-motion`.
+
+**Tarjeta reutilizable** — se extrajo el lenguaje visual de las tarjetas (glow radial, borde-degradado al hover, elevación, ícono que escala/gira, "Entrar →") de `module-cards.tsx` a clases globales `.app-tile*` en `globals.css` y un componente `components/ui/app-tile.tsx`. **Importante**: estas clases van a **nivel raíz** de globals.css, NO dentro de `@layer base` — en Tailwind v4, meterlas en `@layer base` hizo que no se emitieran/aplicaran (las tarjetas salían como texto plano); a nivel raíz siempre se emiten y ganan prioridad. `module-cards.tsx` se refactorizó para usar `AppTile` y sus tarjetas de grupo ahora enlazan a `/g/[key]`.
+
+**Página de grupo** — nuevo `app/(app)/g/[grupo]/page.tsx` (server, valida el `params.grupo` contra `groups`, `notFound()` si no existe) que renderiza `components/grupo-landing.tsx`: un hero del grupo (reutiliza `ModuloHero` + `obtenerInsightsModulo(grupoKey)`, mismo patrón que `InicioHero`) y una grilla de `AppTile` con una tarjeta por módulo del grupo. Como `/g/[grupo]` no es un módulo del nav, `resolverModuloPorRuta` devuelve `null` y la `ModuloHeroBar` del layout no aparece ahí (sin doble hero).
+
+**Sidebar** — el encabezado del grupo pasó de `<button>` (solo toggle) a una fila con un `<Link href="/g/[key]">` (navega a la página del grupo y deja el submenú abierto vía `abrirGrupo`) + un `<button>` con el chevron que solo alterna abrir/cerrar. `grupoActivoKey` y el resaltado del grupo reconocen también la ruta `/g/[key]`.
+
+Verificado con Playwright contra datos reales: clic en "Aves" del sidebar → `/g/aves` con hero (7.397 aves, 4 galpones activos) + 3 tarjetas de módulo; hover sobre "Galpones" → se eleva con glow, ícono en degradado cian y aparece "Entrar →"; `/g/logistica` en verde con 9 tarjetas y KPIs reales (5.833 sin clasificar, 10.392 cartones tras el traslado de la Ronda 13); confirmado que dentro de `/inventario` la banda de módulo sigue apareciendo sobre la vista; sin errores de consola. `npx tsc --noEmit` limpio.
+
 ---
 
 ## 5. Cómo levantar el entorno de desarrollo

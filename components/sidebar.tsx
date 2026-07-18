@@ -27,10 +27,17 @@ export function Sidebar() {
     setGruposAbiertos((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
+  function abrirGrupo(key: string) {
+    setGruposAbiertos((prev) => ({ ...prev, [key]: true }))
+  }
+
   // Tinte del grupo activo (o cian de marca si estamos en Inicio) — igual
   // criterio que el "hero" adaptativo de Lipgo, alimenta el glow del
-  // encabezado y el logo vía la variable CSS --hero.
-  const grupoActivoKey = groups.find((g) => g.modules.some((m) => pathname.startsWith(m.href)))?.key
+  // encabezado y el logo vía la variable CSS --hero. También cuenta la
+  // página del grupo (/g/[key]) como grupo activo.
+  const grupoActivoKey = groups.find(
+    (g) => g.modules.some((m) => pathname.startsWith(m.href)) || pathname === `/g/${g.key}`,
+  )?.key
   const heroTint = groups.find((g) => g.key === grupoActivoKey)?.tint ?? "#00c2dc"
 
   return (
@@ -106,33 +113,48 @@ export function Sidebar() {
         {groups.map((grupo) => {
           const Icono = grupo.icon
           const abierto = gruposAbiertos[grupo.key]
-          const grupoActivo = grupo.modules.some((m) => pathname.startsWith(m.href))
+          const grupoActivo =
+            grupo.modules.some((m) => pathname.startsWith(m.href)) || pathname === `/g/${grupo.key}`
 
           return (
             <div key={grupo.key} className="mb-1">
-              <button
-                type="button"
-                onClick={() => toggleGrupo(grupo.key)}
+              {/* El nombre del grupo navega a su página (/g/[key]) y deja el
+                  submenú abierto; el chevron solo alterna abrir/cerrar. */}
+              <div
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-semibold transition-colors",
+                  "flex w-full items-center gap-1 rounded-md pr-1 text-sm font-semibold transition-colors",
                   grupoActivo ? "text-sidebar-foreground" : "text-sidebar-foreground/80",
                   "hover:bg-sidebar-accent",
                 )}
                 style={{ "--tint": grupo.tint } as CSSProperties}
               >
-                <span
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
-                  style={{ background: "color-mix(in srgb, var(--tint) 22%, transparent)", color: "var(--tint)" }}
+                <Link
+                  href={`/g/${grupo.key}`}
+                  onClick={() => abrirGrupo(grupo.key)}
+                  className={cn(
+                    "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2",
+                    colapsado && "justify-center",
+                  )}
                 >
-                  <Icono className="h-3.5 w-3.5" />
-                </span>
+                  <span
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+                    style={{ background: "color-mix(in srgb, var(--tint) 22%, transparent)", color: "var(--tint)" }}
+                  >
+                    <Icono className="h-3.5 w-3.5" />
+                  </span>
+                  {!colapsado && <span className="flex-1 truncate">{grupo.title}</span>}
+                </Link>
                 {!colapsado && (
-                  <>
-                    <span className="flex-1 truncate">{grupo.title}</span>
-                    <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform", abierto && "rotate-180")} />
-                  </>
+                  <button
+                    type="button"
+                    onClick={() => toggleGrupo(grupo.key)}
+                    aria-label={abierto ? "Colapsar" : "Desplegar"}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-white/10 hover:text-sidebar-foreground"
+                  >
+                    <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", abierto && "rotate-180")} />
+                  </button>
                 )}
-              </button>
+              </div>
 
               {!colapsado && abierto && (
                 <div className="ml-3 flex flex-col gap-0.5 border-l border-sidebar-border pl-3 pt-1">
