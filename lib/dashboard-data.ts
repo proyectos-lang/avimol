@@ -20,6 +20,7 @@ import {
   CalendarDays,
   PackageCheck,
   AlertTriangle,
+  Settings,
   type LucideIcon,
 } from "lucide-react"
 
@@ -103,7 +104,48 @@ export const groups: GrupoNav[] = [
     tint: "var(--chart-5)",
     modules: [{ label: "Indicadores", href: "/indicadores", icon: BarChart3 }],
   },
+  {
+    key: "config",
+    title: "Configuración",
+    icon: Settings,
+    tint: "var(--chart-5)",
+    modules: [{ label: "Usuarios", href: "/configuracion/usuarios", icon: Users }],
+  },
 ]
+
+// "all" = admin (ve todo, incluido el grupo Configuración). Un array es la
+// lista de href de módulo que un usuario no-admin tiene permitidos.
+export type Permisos = string[] | "all"
+
+// Filtra los grupos/módulos del nav a solo lo permitido para el usuario,
+// quitando grupos que queden vacíos. El grupo "config" solo aparece para
+// el admin ("all").
+export function filtrarGrupos(permisos: Permisos): GrupoNav[] {
+  if (permisos === "all") return groups
+  const permitidos = new Set(permisos)
+  return groups
+    .filter((g) => g.key !== "config")
+    .map((g) => ({ ...g, modules: g.modules.filter((m) => permitidos.has(m.href)) }))
+    .filter((g) => g.modules.length > 0)
+}
+
+// Devuelve el href del módulo dueño de una ruta cualquiera, por prefijo —
+// incluye rutas de detalle (/cargue/123 → /cargue). Se usa para bloquear
+// el acceso por URL en el layout (a diferencia de resolverModuloPorRuta,
+// que devuelve null en detalles porque solo alimenta la banda de insights).
+export function moduloDeRuta(pathname: string): string | null {
+  let mejor: string | null = null
+  let mejorLargo = -1
+  for (const grupo of groups) {
+    for (const modulo of grupo.modules) {
+      if ((pathname === modulo.href || pathname.startsWith(modulo.href + "/")) && modulo.href.length > mejorLargo) {
+        mejor = modulo.href
+        mejorLargo = modulo.href.length
+      }
+    }
+  }
+  return mejor
+}
 
 export interface ModuloResuelto {
   grupoKey: string

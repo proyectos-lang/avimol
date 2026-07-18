@@ -6,12 +6,15 @@ import { usePathname, useRouter } from "next/navigation"
 import { ChevronDown, ChevronLeft, ChevronRight, Egg, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { groups } from "@/lib/dashboard-data"
+import { filtrarGrupos } from "@/lib/dashboard-data"
+import { usePermisos } from "@/components/permisos-provider"
 import { cerrarSesion } from "@/lib/auth/actions"
 
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
+  const { permisos } = usePermisos()
+  const groups = filtrarGrupos(permisos)
   const [colapsado, setColapsado] = useState(false)
   const [gruposAbiertos, setGruposAbiertos] = useState<Record<string, boolean>>(
     () => Object.fromEntries(groups.map((g) => [g.key, true])),

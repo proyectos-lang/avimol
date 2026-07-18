@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { groups } from "@/lib/dashboard-data"
 import { obtenerInsightsModulo } from "@/lib/insights-actions"
 import { ICONOS } from "@/components/insights-iconos"
+import { usePermisos } from "@/components/permisos-provider"
 import { ModuloHero, type HeroAlerta, type HeroKpi } from "@/components/ui/modulo-hero"
 import { AppTile } from "@/components/ui/app-tile"
 import type { InsightsModulo } from "@/lib/insights-tipos"
@@ -20,7 +21,12 @@ const SUBTITULO_GRUPO: Record<string, string> = {
 // módulo (con efecto botón al hover). Se llega desde el inicio o desde el
 // nombre del grupo en el sidebar.
 export function GrupoLanding({ grupoKey }: { grupoKey: string }) {
+  const { permisos } = usePermisos()
   const grupo = groups.find((g) => g.key === grupoKey)
+  const modulosVisibles =
+    grupo && permisos !== "all"
+      ? grupo.modules.filter((m) => (permisos as string[]).includes(m.href))
+      : (grupo?.modules ?? [])
   const [datos, setDatos] = useState<InsightsModulo | null>(null)
   const [cargando, setCargando] = useState(true)
 
@@ -70,7 +76,7 @@ export function GrupoLanding({ grupoKey }: { grupoKey: string }) {
       </div>
 
       <div className="apps-grid grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
-        {grupo.modules.map((m) => (
+        {modulosVisibles.map((m) => (
           <AppTile key={m.href} tint={grupo.tint} icono={m.icon} nombre={m.label} href={m.href} />
         ))}
       </div>

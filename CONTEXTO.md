@@ -95,6 +95,7 @@ el SQL Editor de Supabase):
 17. **`017_indices_indicadores.sql`** — 5 índices (`CREATE INDEX IF NOT EXISTS`) sobre FK sin índice previo (`movimientos_huevo_sin_clasificar.lote_huevo_id`, `clasificaciones.lote_huevo_id`, `clasificaciones_detalle.clasificacion_id`, `averias_huevo.clasificacion_id`, `clasificaciones_cartones_extra.clasificacion_id`) que las nuevas consultas de indicadores por módulo filtran seguido. Solo rendimiento, no cambia datos ni es requisito funcional.
 18. **`019_taxonomia_averias.sql`** — cambia el CHECK de `averias_huevo.tipo_averia` de `picado/roto/partido` a `picado/roto_sin_recuperar/roto_con_yema` y migra las históricas `roto`/`partido` a `roto_sin_recuperar` (quita el CHECK viejo → migra datos → agrega el CHECK nuevo, en ese orden). (No hay `018` — se saltó el número.)
 19. **`020_cartones_venta_traslados.sql`** — amplía el CHECK de `movimientos_cartones.tipo_movimiento` con `salida_venta`/`salida_traslado`/`entrada_traslado`; agrega `movimientos_cartones.venta_directa_id`/`orden_cargue_id`, `solicitudes_traslado.cartones_solicitados`, `ordenes_cargue.cartones_cargados`/`cartones_recibidos` (todo `ADD COLUMN IF NOT EXISTS`, idempotente).
+20. **`021_usuarios_permisos.sql`** — tabla `avimol.usuario_modulos(usuario_id, modulo_href, UNIQUE)` + índice: allow-list de rutas de módulo por usuario para el control de permisos. El admin no necesita filas (ve todo por su rol).
 
 ### Tablas por dominio
 
@@ -517,6 +518,19 @@ Continuación de la potencia visual: transiciones animadas al navegar y, al entr
 **Sidebar** — el encabezado del grupo pasó de `<button>` (solo toggle) a una fila con un `<Link href="/g/[key]">` (navega a la página del grupo y deja el submenú abierto vía `abrirGrupo`) + un `<button>` con el chevron que solo alterna abrir/cerrar. `grupoActivoKey` y el resaltado del grupo reconocen también la ruta `/g/[key]`.
 
 Verificado con Playwright contra datos reales: clic en "Aves" del sidebar → `/g/aves` con hero (7.397 aves, 4 galpones activos) + 3 tarjetas de módulo; hover sobre "Galpones" → se eleva con glow, ícono en degradado cian y aparece "Entrar →"; `/g/logistica` en verde con 9 tarjetas y KPIs reales (5.833 sin clasificar, 10.392 cartones tras el traslado de la Ronda 13); confirmado que dentro de `/inventario` la banda de módulo sigue apareciendo sobre la vista; sin errores de consola. `npx tsc --noEmit` limpio.
+
+### Ronda 16 — Configuración: gestión de usuarios + permisos por módulo (2026-07-18)
+Primer modelo de autorización del proyecto. Requirió 1 migración: `021_usuarios_permisos.sql` (tabla `avimol.usuario_modulos`, allow-list de href por usuario). Decisiones confirmadas: solo `rol='admin'` administra y ve Configuración (el admin siempre ve todo); un usuario nuevo empieza sin módulos; módulo no permitido = oculto en el nav Y bloqueado por URL.
+
+**Acciones (`lib/usuarios-actions.ts`, todas validan `rol==='admin'` server-side)**: `listarUsuarios`, `crearUsuario` (bcrypt.hash cost 10, inserta `usuarios` + `usuario_modulos`), `actualizarUsuario` (nombre/rol/activo; bloquea auto-desactivarse), `actualizarModulosUsuario` (reemplaza la allow-list), `restablecerPassword`, y `obtenerModulosPermitidos()` → `"all"` para admin o la lista de href para el resto. `ROLES` quedó como const **no exportada** (un archivo `"use server"` solo puede exportar funciones async).
+
+**Nav dinámico (`lib/dashboard-data.ts`)**: nuevo grupo `config` (Configuración → `/configuracion/usuarios`, solo admin); `type Permisos = string[] | "all"`; `filtrarGrupos(permisos)` (quita módulos/grupos no permitidos; `config` solo para admin); `moduloDeRuta(pathname)` (match por prefijo, incluye detalles `[id]`, para el bloqueo por URL).
+
+**Enforcement**: `proxy.ts` setea el header `x-pathname` (además del chequeo de sesión que ya hacía). `app/(app)/layout.tsx` pasó a **async**: obtiene el usuario, `obtenerModulosPermitidos()`, lee el pathname del header y redirige a `/` si la ruta cae en un módulo/grupo no permitido o en `/configuracion` sin ser admin; envuelve todo en `<PermisosProvider>` (nuevo `components/permisos-provider.tsx`, context + `usePermisos()`). `sidebar.tsx`, `module-cards.tsx` y `grupo-landing.tsx` filtran `groups` con `usePermisos()` + `filtrarGrupos` (los íconos siguen viniendo del import estático, no cruzan server→client). Los cambios de permisos aplican de inmediato en el siguiente movimiento del usuario (el layout consulta la BD en cada navegación); el `rol` sí vive en el JWT (cambiar de rol aplica al próximo login).
+
+**UI**: `app/(app)/configuracion/usuarios/page.tsx` (gate admin) → `components/configuracion/usuarios-view.tsx`: formulario crear usuario (usuario/nombre/contraseña/rol + checkboxes de módulos agrupados por los 5 grupos con "seleccionar todo el grupo", por defecto nada marcado), tabla de usuarios con editar-permisos (Dialog), activar/desactivar y restablecer contraseña. El admin aparece con "Todos" y sus acciones de permisos/auto-desactivar quedan deshabilitadas.
+
+`npx tsc --noEmit` limpio. Verificado con Playwright que la página `/configuracion/usuarios` carga como admin, lista los usuarios reales (admin "Todos" + vendedor1 con 0 módulos), muestra el formulario con los checkboxes por grupo, y que Configuración aparece en el sidebar. **Pendiente**: que el usuario corra `021_usuarios_permisos.sql` para verificar end-to-end el flujo completo (crear usuario, asignar permisos, ocultar + bloquear por URL con un usuario no-admin).
 
 ---
 

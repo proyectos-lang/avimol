@@ -20,7 +20,11 @@ export async function proxy(request: NextRequest) {
   try {
     const secret = new TextEncoder().encode(process.env.AVIMOL_JWT_SECRET!)
     await jwtVerify(token, secret)
-    return NextResponse.next()
+    // Expone la ruta a los server components (el layout la usa para
+    // bloquear el acceso por URL a módulos no permitidos).
+    const headers = new Headers(request.headers)
+    headers.set("x-pathname", pathname)
+    return NextResponse.next({ request: { headers } })
   } catch {
     const respuesta = NextResponse.redirect(new URL("/login", request.url))
     respuesta.cookies.delete(COOKIE_NAME)
