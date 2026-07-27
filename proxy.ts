@@ -2,10 +2,16 @@ import { NextResponse, type NextRequest } from "next/server"
 import { jwtVerify } from "jose"
 
 const COOKIE_NAME = "avimol_session"
-const RUTAS_PUBLICAS = ["/login"]
+// El logo (marca) debe servirse sin sesión para que aparezca en el login.
+const RUTAS_PUBLICAS = ["/login", "/logo-lipgo-mark"]
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // Assets estáticos con extensión (imágenes, etc.) no requieren sesión.
+  if (/\.[a-z0-9]+$/i.test(pathname)) {
+    return NextResponse.next()
+  }
 
   if (RUTAS_PUBLICAS.some((ruta) => pathname.startsWith(ruta)) || pathname.startsWith("/api/auth")) {
     return NextResponse.next()

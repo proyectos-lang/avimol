@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { LogoMarca } from "@/components/logo-marca"
 
 export function LoginForm() {
   const router = useRouter()
@@ -34,8 +35,9 @@ export function LoginForm() {
 
   return (
     <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle className="text-2xl">Avimol</CardTitle>
+      <CardHeader className="items-center text-center">
+        <LogoMarca size={52} />
+        <CardTitle className="mt-2 text-2xl">Avimol</CardTitle>
         <CardDescription>Inventario, logística y comercialización de huevos</CardDescription>
       </CardHeader>
       <CardContent>

@@ -3,11 +3,12 @@
 import { useState, type CSSProperties } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { ChevronDown, ChevronLeft, ChevronRight, Egg, LogOut } from "lucide-react"
+import { ChevronDown, ChevronLeft, ChevronRight, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { filtrarGrupos } from "@/lib/dashboard-data"
 import { usePermisos } from "@/components/permisos-provider"
+import { LogoMarca } from "@/components/logo-marca"
 import { cerrarSesion } from "@/lib/auth/actions"
 
 export function Sidebar() {
@@ -81,14 +82,10 @@ export function Sidebar() {
         style={{ "--hero": heroTint } as CSSProperties}
       >
         {colapsado ? (
-          <span className="avimol-logo-mark">
-            <Egg className="h-4 w-4" />
-          </span>
+          <LogoMarca size={30} />
         ) : (
           <span className="flex items-center gap-2.5">
-            <span className="avimol-logo-mark">
-              <Egg className="h-4 w-4" />
-            </span>
+            <LogoMarca size={30} />
             <span className="text-lg font-extrabold tracking-tight text-sidebar-foreground">Avimol</span>
           </span>
         )}

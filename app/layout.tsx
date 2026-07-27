@@ -15,6 +15,8 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Avimol",
   description: "Inventario, logística y comercialización de huevos — Avimol",
+  // Ícono de la pestaña = marca de LiPGO.
+  icons: { icon: "/logo-lipgo-mark.png" },
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {

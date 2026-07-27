@@ -534,6 +534,12 @@ Primer modelo de autorización del proyecto. Requirió 1 migración: `021_usuari
 
 ---
 
+### Ronda 17 — Logo de LiPGO (marca)
+
+Se reemplazó el ícono placeholder (huevo en cuadro cian) por la marca de **LiPGO** conservando el nombre **Avimol** como texto. `components/logo-marca.tsx` (`"use client"`) renderiza `public/logo-lipgo-mark.png` con degradado gracioso: intenta `.png` → `.svg` → cae al huevo cian anterior si el archivo faltara. Se usa en `sidebar.tsx` (colapsado y expandido, junto al texto "Avimol"), `login-form.tsx` (CardHeader centrado, size 52) y como favicon en `app/layout.tsx` (`icons.icon`). El `proxy.ts` ahora deja pasar sin sesión cualquier ruta con extensión de archivo (`/\.[a-z0-9]+$/i`) además del prefijo `/logo-lipgo-mark`, para que el logo cargue en la pantalla de login (antes lo redirigía a `/login` con 307). El PNG (114 KB) lo colocó el usuario en `public/`.
+
+---
+
 ## 5. Cómo levantar el entorno de desarrollo
 
 ```bash
