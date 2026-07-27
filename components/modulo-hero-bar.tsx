@@ -6,6 +6,7 @@ import { resolverModuloPorRuta } from "@/lib/dashboard-data"
 import { obtenerInsightsModulo } from "@/lib/insights-actions"
 import { ICONOS } from "@/components/insights-iconos"
 import { ModuloHero, type HeroAlerta, type HeroKpi } from "@/components/ui/modulo-hero"
+import { AyudaModulo } from "@/components/ayuda-modulo"
 import type { InsightsModulo } from "@/lib/insights-tipos"
 
 const SUBTITULO_GRUPO: Record<string, string> = {
@@ -64,6 +65,7 @@ export function ModuloHeroBar() {
       kpis={kpis}
       alertas={alertas}
       cargando={cargando}
+      accion={<AyudaModulo href={resuelto.modulo.href} titulo={resuelto.modulo.label} tint={resuelto.tint} />}
     />
   )
 }

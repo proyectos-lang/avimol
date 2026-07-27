@@ -1,4 +1,4 @@
-import type { ComponentType, CSSProperties } from "react"
+import type { ComponentType, CSSProperties, ReactNode } from "react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { TonoAlerta } from "@/lib/insights-tipos"
@@ -35,6 +35,7 @@ export function ModuloHero({
   kpis,
   alertas = [],
   cargando = false,
+  accion,
   className,
 }: {
   tint: string
@@ -44,6 +45,7 @@ export function ModuloHero({
   kpis: HeroKpi[]
   alertas?: HeroAlerta[]
   cargando?: boolean
+  accion?: ReactNode
   className?: string
 }) {
   return (
@@ -82,6 +84,7 @@ export function ModuloHero({
             <h2 className="truncate text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">{titulo}</h2>
             {subtitulo && <p className="mt-0.5 text-sm text-muted-foreground">{subtitulo}</p>}
           </div>
+          {accion && <div className="ml-auto flex-shrink-0 self-start">{accion}</div>}
         </div>
 
         {cargando ? (

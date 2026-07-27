@@ -538,6 +538,10 @@ Primer modelo de autorización del proyecto. Requirió 1 migración: `021_usuari
 
 Se reemplazó el ícono placeholder (huevo en cuadro cian) por la marca de **LiPGO** conservando el nombre **Avimol** como texto. `components/logo-marca.tsx` (`"use client"`) renderiza `public/logo-lipgo-mark.png` con degradado gracioso: intenta `.png` → `.svg` → cae al huevo cian anterior si el archivo faltara. Se usa en `sidebar.tsx` (colapsado y expandido, junto al texto "Avimol"), `login-form.tsx` (CardHeader centrado, size 52) y como favicon en `app/layout.tsx` (`icons.icon`). El `proxy.ts` ahora deja pasar sin sesión cualquier ruta con extensión de archivo (`/\.[a-z0-9]+$/i`) además del prefijo `/logo-lipgo-mark`, para que el logo cargue en la pantalla de login (antes lo redirigía a `/login` con 307). El PNG (114 KB) lo colocó el usuario en `public/`.
 
+### Ronda 18 — Botón de ayuda por módulo
+
+Cada módulo tiene un botón de ayuda (**?**) en la esquina superior derecha de su banda de insights. Al abrirlo muestra un diálogo con el propósito del módulo y los pasos de uso numerados. El texto vive en `lib/ayuda-modulos.ts` (`AYUDA_MODULOS`, indexado por el `href` del módulo, con `{proposito, acciones[], nota?}` para los 24 módulos). `components/ayuda-modulo.tsx` (`"use client"`) es el botón + `Dialog`; no renderiza nada si el href no tiene ayuda registrada. Se enchufa vía un nuevo slot `accion?: ReactNode` en `components/ui/modulo-hero.tsx` (esquina superior derecha del header), que `components/modulo-hero-bar.tsx` llena con `<AyudaModulo href titulo tint />`. Como la banda solo se monta en la página exacta de un módulo del nav, el botón aparece en todas ellas (no en el inicio ni en detalles con id). Verificado con Playwright (1 botón en /galpones, diálogo abre con propósito + pasos, sin errores de consola).
+
 ---
 
 ## 5. Cómo levantar el entorno de desarrollo
