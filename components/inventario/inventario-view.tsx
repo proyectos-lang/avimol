@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertaRebandejar } from "@/components/ui/alerta-rebandejar"
 import { CartonesTab } from "@/components/inventario/cartones-tab"
+import { YemasTab } from "@/components/inventario/yemas-tab"
 import { formatearFechaColombia, formatearFechaHoraColombia } from "@/lib/date-utils"
 import {
   listarInventario,
@@ -115,6 +116,7 @@ export function InventarioView() {
         <TabsList>
           <TabsTrigger value="huevo">Huevo</TabsTrigger>
           <TabsTrigger value="cartones">Cartones</TabsTrigger>
+          <TabsTrigger value="yemas">Yemas</TabsTrigger>
         </TabsList>
 
         <TabsContent value="huevo">
@@ -255,6 +257,10 @@ export function InventarioView() {
 
         <TabsContent value="cartones">
           <CartonesTab />
+        </TabsContent>
+
+        <TabsContent value="yemas">
+          <YemasTab />
         </TabsContent>
       </Tabs>
     </div>

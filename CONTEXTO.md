@@ -556,6 +556,14 @@ Cuatro ajustes por notas del usuario:
 
 `scripts/avimol/022_averias_netas_y_merge_lotes.sql` (idempotente): nuevo tipo `salida_averia` + `DELETE` de permisos `/lotes-huevo`. `npx tsc --noEmit` limpio. Verificado con Playwright: logo prominente y legible en login y sidebar (expandido/colapsado); "Lotes de huevo" ya no está en el nav y `/lotes-huevo` da 404; detalle del Historial abre la trazabilidad por lote; chip "Huevos averiados" visible. **El flujo de averías netas (#4) se prueba en vivo solo tras correr la migración 022** (antes, el insert de `salida_averia` violaría el CHECK).
 
+### Ronda 20 — KPI de sacrificio + pestaña de inventario de Yemas
+
+Dos ajustes por notas del usuario:
+
+1. **Tarjeta de sacrificio en los KPI de galpones.** Se agregó un KPI "Sacrificio" a la banda de insights del grupo `aves` (`lib/insights-actions.ts::insightsAves`), que aparece encima de Galpones/Lotes de aves/Indicadores, junto a Mortalidad. Formato **"cantidad (tasa %)"**, p. ej. `130 (0.9%)`. Los datos ya los devolvía `obtenerIndicadoresAves()` (`aves.sacrificioTotal`, `aves.tasaSacrificioTotal` = sacrificados/ingreso histórico total ×100) — cero fetching nuevo. Ícono nuevo `sacrificio: Drumstick` en `components/insights-iconos.ts` + clave en `lib/insights-tipos.ts`.
+
+2. **Inventario de Yemas visible.** El backend de yemas ya existía (tablas `inventario_yemas`/`movimientos_yemas`/`procesamientos_yema_averia` de la migración 015, alimentadas por `registrarProcesamientoYemas` desde las dos vistas de Averías) pero **no había ninguna pantalla para consultarlo** — la acción `listarInventarioYemas` estaba huérfana. Se agregó una **pestaña "Yemas"** al módulo Inventario (`components/inventario/yemas-tab.tsx`, junto a Huevo/Cartones), de solo consulta: StatChip de total disponible, filtro por bodega, tabla de saldo por bodega y kardex de movimientos. Reusa `listarInventarioYemas(bodegaId?)` (ahora con filtro) + nueva `listarMovimientosYemas(bodegaId?)` en `lib/averias-actions.ts`. No requiere migración. (Pendiente futuro: las yemas solo entran; aún no hay flujo de salida/venta ni están en Catálogo/Pedidos.) Verificado con Playwright (18 yemas reales en inventario, saldo por bodega y kardex, sin errores).
+
 ---
 
 ## 5. Cómo levantar el entorno de desarrollo

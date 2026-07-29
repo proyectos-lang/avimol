@@ -187,9 +187,11 @@ export interface InventarioYemaFila {
   cantidadDisponible: number
 }
 
-export async function listarInventarioYemas(): Promise<InventarioYemaFila[]> {
+export async function listarInventarioYemas(bodegaId?: number | null): Promise<InventarioYemaFila[]> {
   const db = getAvimolDb()
-  const { data, error } = await db.from("inventario_yemas").select("bodega_id, cantidad_disponible, bodegas(nombre)")
+  let query = db.from("inventario_yemas").select("bodega_id, cantidad_disponible, bodegas(nombre)")
+  if (bodegaId != null) query = query.eq("bodega_id", bodegaId)
+  const { data, error } = await query
 
   if (error) {
     console.error("[avimol] Error listando inventario de yemas:", error)
@@ -200,6 +202,41 @@ export async function listarInventarioYemas(): Promise<InventarioYemaFila[]> {
     bodegaId: fila.bodega_id,
     bodegaNombre: fila.bodegas?.nombre ?? "",
     cantidadDisponible: fila.cantidad_disponible,
+  }))
+}
+
+export interface MovimientoYema {
+  id: number
+  creadoEn: string
+  bodegaNombre: string
+  tipoMovimiento: string
+  cantidad: number
+  observaciones: string | null
+}
+
+// Kardex de yemas: por ahora solo hay entradas por procesamiento de averías
+// "roto con yema" (y el tipo 'ajuste' previsto en el esquema, aún sin uso).
+export async function listarMovimientosYemas(bodegaId?: number | null): Promise<MovimientoYema[]> {
+  const db = getAvimolDb()
+  let query = db
+    .from("movimientos_yemas")
+    .select("id, creado_en, tipo_movimiento, cantidad, observaciones, bodegas(nombre)")
+    .order("creado_en", { ascending: false })
+  if (bodegaId != null) query = query.eq("bodega_id", bodegaId)
+  const { data, error } = await query
+
+  if (error) {
+    console.error("[avimol] Error listando movimientos de yemas:", error)
+    return []
+  }
+
+  return (data ?? []).map((fila: any) => ({
+    id: fila.id,
+    creadoEn: fila.creado_en,
+    bodegaNombre: fila.bodegas?.nombre ?? "",
+    tipoMovimiento: fila.tipo_movimiento,
+    cantidad: fila.cantidad,
+    observaciones: fila.observaciones ?? null,
   }))
 }
 

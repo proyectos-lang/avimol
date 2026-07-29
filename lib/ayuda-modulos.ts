@@ -91,11 +91,12 @@ export const AYUDA_MODULOS: Record<string, AyudaModulo> = {
     ],
   },
   "/inventario": {
-    proposito: "Consultar el saldo de huevo por bodega, lote y referencia, más el inventario de cartones.",
+    proposito: "Consultar el saldo de huevo por bodega, lote y referencia, más el inventario de cartones y de yemas.",
     acciones: [
       "Filtra por bodega y busca por lote, galpón, referencia o estantería.",
       "Abre un lote/referencia para ver su kardex de movimientos.",
-      "Alterna entre las pestañas Huevo y Cartones.",
+      "Alterna entre las pestañas Huevo, Cartones y Yemas.",
+      "En Yemas ves el saldo por bodega y el kardex de las yemas recuperadas al procesar averías.",
     ],
     nota: "Pantalla de solo consulta.",
   },

@@ -29,6 +29,7 @@ async function insightsAves(): Promise<InsightsModulo> {
     { iconoKey: "bird", label: "Aves activas", valor: num(aves.utilizadaTotal) },
     { iconoKey: "gauge", label: "Ocupación", valor: `${aves.porcentajeOcupacionTotal}%` },
     { iconoKey: "alerta", label: "Mortalidad", valor: `${aves.tasaMortalidadTotal}%` },
+    { iconoKey: "sacrificio", label: "Sacrificio", valor: `${num(aves.sacrificioTotal)} (${aves.tasaSacrificioTotal}%)` },
     { iconoKey: "edad", label: "Edad prom.", valor: `${aves.edadPromedioTotal} sem` },
   ]
 

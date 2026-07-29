@@ -24,6 +24,7 @@ export type IconoKey =
   | "tienda"
   | "camion"
   | "sinClasificar"
+  | "sacrificio"
 
 export type TonoAlerta = "info" | "advertencia" | "critico" | "ok"
 

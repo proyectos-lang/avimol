@@ -17,6 +17,7 @@ import {
   Store,
   Truck,
   Layers,
+  Drumstick,
   type LucideIcon,
 } from "lucide-react"
 import type { IconoKey } from "@/lib/insights-tipos"
@@ -42,4 +43,5 @@ export const ICONOS: Record<IconoKey, LucideIcon> = {
   tienda: Store,
   camion: Truck,
   sinClasificar: Layers,
+  sacrificio: Drumstick,
 }
