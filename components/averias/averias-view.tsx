@@ -125,7 +125,11 @@ export function AveriasView() {
         titulo="Averías de bodega"
         subtitulo="Picados, rotos y partidos de despacho y recepción — las de recolección/clasificación se manejan en Recolección → Averías"
       >
-        <StatChip icono={AlertTriangle} label="Averías" valor={averias.length} />
+        <StatChip
+          icono={AlertTriangle}
+          label="Huevos averiados"
+          valor={averias.reduce((s, a) => s + a.cantidad, 0)}
+        />
         <StatChip icono={Droplet} label="Pendientes de procesar yema" valor={seleccionables.length} />
       </PageHeader>
 

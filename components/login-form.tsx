@@ -36,8 +36,10 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader className="items-center text-center">
-        <LogoMarca size={52} />
-        <CardTitle className="mt-2 text-2xl">Avimol</CardTitle>
+        <LogoMarca height={60} />
+        <CardTitle className="mt-3 text-lg font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Avimol
+        </CardTitle>
         <CardDescription>Inventario, logística y comercialización de huevos</CardDescription>
       </CardHeader>
       <CardContent>

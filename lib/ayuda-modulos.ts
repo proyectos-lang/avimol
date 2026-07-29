@@ -56,20 +56,14 @@ export const AYUDA_MODULOS: Record<string, AyudaModulo> = {
       "Guarda solo cuando todo lo que entra queda contabilizado.",
     ],
   },
-  "/lotes-huevo": {
-    proposito: "Consultar la trazabilidad de los lotes de huevo: galpón, lote de aves, edad, clasificación y averías.",
-    acciones: [
-      "Busca por lote, galpón o bodega.",
-      "Abre un lote para ver su clasificación y sus averías.",
-    ],
-    nota: "Pantalla de solo consulta.",
-  },
   "/recoleccion/historial": {
-    proposito: "Ver el total recolectado por día y galpón, comparado con el mínimo esperado.",
+    proposito:
+      "Ver el total recolectado por día y galpón (comparado con el mínimo esperado) y la trazabilidad de cada lote de huevo.",
     acciones: [
       "Busca por galpón.",
       "Abre el detalle de un día/galpón para ver los lotes de ese día y sus averías.",
       "Aprueba, rechaza o deja pendiente cada avería desde el detalle.",
+      "Abre la trazabilidad de un lote: lote de aves, edad al recolectar, clasificación por referencia/estantería y averías.",
     ],
   },
   "/recoleccion/averias": {

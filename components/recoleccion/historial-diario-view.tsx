@@ -14,7 +14,14 @@ import { SearchInput } from "@/components/ui/search-input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatearFechaColombia, formatearFechaHoraColombia } from "@/lib/date-utils"
 import { listarRecoleccionPorDia, type RecoleccionDia } from "@/lib/recoleccion-actions"
-import { listarLotesHuevoPorGalponYFecha, type LoteDelDia } from "@/lib/lotes-huevo-actions"
+import {
+  listarLotesHuevoPorGalponYFecha,
+  obtenerDetalleLoteHuevo,
+  type LoteDelDia,
+  type CabeceraLoteHuevo,
+  type DetalleLoteHuevo,
+  type AveriaLoteHuevo,
+} from "@/lib/lotes-huevo-actions"
 import { actualizarEstadoAveria } from "@/lib/averias-actions"
 import { TIPO_AVERIA_LABEL } from "@/lib/estado-labels"
 
@@ -26,6 +33,15 @@ export function HistorialDiarioView() {
   const [filaDetalle, setFilaDetalle] = useState<RecoleccionDia | null>(null)
   const [lotesDelDia, setLotesDelDia] = useState<LoteDelDia[]>([])
   const [cargandoDetalle, setCargandoDetalle] = useState(false)
+
+  // Trazabilidad por lote (fusionada desde el antiguo módulo "Lotes de huevo").
+  const [loteAbierto, setLoteAbierto] = useState<LoteDelDia | null>(null)
+  const [detalleLote, setDetalleLote] = useState<{
+    cabecera: CabeceraLoteHuevo | null
+    detalle: DetalleLoteHuevo[]
+    averias: AveriaLoteHuevo[]
+  } | null>(null)
+  const [cargandoLote, setCargandoLote] = useState(false)
 
   async function cargarDatos() {
     setCargando(true)
@@ -53,6 +69,14 @@ export function HistorialDiarioView() {
     setCargandoDetalle(true)
     setLotesDelDia(await listarLotesHuevoPorGalponYFecha(fila.galpon_id, fila.fecha_cosecha))
     setCargandoDetalle(false)
+  }
+
+  async function abrirLote(lote: LoteDelDia) {
+    setLoteAbierto(lote)
+    setDetalleLote(null)
+    setCargandoLote(true)
+    setDetalleLote(await obtenerDetalleLoteHuevo(lote.loteHuevoId))
+    setCargandoLote(false)
   }
 
   async function onCambiarEstadoAveria(averiaId: number, estado: "pendiente" | "aprobada" | "rechazada") {
@@ -192,6 +216,7 @@ export function HistorialDiarioView() {
                         <TableHead>Hora</TableHead>
                         <TableHead>Origen</TableHead>
                         <TableHead className="text-right">Cantidad</TableHead>
+                        <TableHead className="text-right">Trazabilidad</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -202,6 +227,11 @@ export function HistorialDiarioView() {
                           <TableCell>{l.origen === "app_movil" ? "Campo" : "Clasificadora"}</TableCell>
                           <TableCell className="text-right tabular-nums">
                             {l.cantidadRecolectada.toLocaleString("es-CO")}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="outline" size="icon" onClick={() => abrirLote(l)} title="Ver trazabilidad del lote">
+                              <Eye className="h-4 w-4" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -257,6 +287,70 @@ export function HistorialDiarioView() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!loteAbierto} onOpenChange={(v) => !v && setLoteAbierto(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Trazabilidad · Lote {loteAbierto?.codigo}</DialogTitle>
+          </DialogHeader>
+
+          {cargandoLote || !detalleLote ? (
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4 text-sm">
+              {detalleLote.cabecera && (
+                <div className="rounded-md border border-border p-3 text-muted-foreground">
+                  Lote de aves {detalleLote.cabecera.lote_aves_codigo} · Bodega {detalleLote.cabecera.bodega_nombre} ·
+                  Edad al recolectar:{" "}
+                  <span className="font-semibold text-foreground">
+                    {detalleLote.cabecera.edad_semanas_captura} semanas
+                  </span>
+                </div>
+              )}
+
+              <div>
+                <p className="mb-2 font-semibold">Clasificación</p>
+                {detalleLote.detalle.length === 0 ? (
+                  <p className="text-muted-foreground">Este lote todavía no se ha clasificado.</p>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {detalleLote.detalle.map((d, i) => (
+                      <div key={i} className="flex justify-between rounded-md border border-border px-3 py-2">
+                        <span>
+                          {d.referencia_nombre}
+                          {d.anaquel_codigo && ` · Estantería ${d.anaquel_codigo}`}
+                        </span>
+                        <span className="font-semibold">{d.cantidad.toLocaleString("es-CO")}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {detalleLote.averias.length > 0 && (
+                <div>
+                  <p className="mb-2 font-semibold">Averías</p>
+                  <div className="flex flex-col gap-1">
+                    {detalleLote.averias.map((a, i) => (
+                      <div key={i} className="flex justify-between rounded-md border border-border px-3 py-2">
+                        <span>
+                          {TIPO_AVERIA_LABEL[a.tipo_averia as keyof typeof TIPO_AVERIA_LABEL] ?? a.tipo_averia}
+                          {a.referencia_nombre && ` · ${a.referencia_nombre}`}
+                          <span className="text-muted-foreground"> ({a.etapa})</span>
+                        </span>
+                        <span className="font-semibold">{a.cantidad.toLocaleString("es-CO")}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

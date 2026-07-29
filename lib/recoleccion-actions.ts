@@ -114,6 +114,24 @@ export interface DatosRecoleccion {
   averias: { tipoAveria: TipoAveria; referenciaId: number | null; cantidad: number }[]
 }
 
+// Reparte un entero `total` entre `pesos` proporcionalmente a cada peso, con
+// método de mayor-resto para que la suma de los resultados sea exactamente
+// `total` (sin perder ni inventar unidades por redondeo). Cada resultado nunca
+// supera su peso mientras `total <= suma(pesos)`.
+function repartirProporcional(pesos: number[], total: number): number[] {
+  const sumaPesos = pesos.reduce((s, p) => s + p, 0)
+  if (total <= 0 || sumaPesos <= 0) return pesos.map(() => 0)
+  const exactos = pesos.map((p) => (p / sumaPesos) * total)
+  const base = exactos.map((x) => Math.floor(x))
+  let restante = total - base.reduce((s, b) => s + b, 0)
+  const orden = exactos.map((x, i) => ({ i, frac: x - Math.floor(x) })).sort((a, b) => b.frac - a.frac)
+  for (let k = 0; k < orden.length && restante > 0; k++) {
+    base[orden[k].i] += 1
+    restante -= 1
+  }
+  return base
+}
+
 export async function registrarRecoleccion(
   datos: DatosRecoleccion,
 ): Promise<{ success: boolean; message?: string; codigo?: string }> {
@@ -161,15 +179,29 @@ export async function registrarRecoleccion(
     return { success: false, message: "No se pudo generar un código de lote único, intenta de nuevo" }
   }
 
+  const averiasValidas = datos.averias.filter((a) => a.cantidad > 0)
+  const totalRecolectado = cantidadesValidas.reduce((s, c) => s + c.cantidad, 0)
+  const totalAverias = averiasValidas.reduce((s, a) => s + a.cantidad, 0)
+
+  // Las averías son huevos que se rompieron/dañaron en la recolección: NO son
+  // huevo bueno, así que se descuentan del inventario "sin clasificar" para que
+  // a la clasificadora solo llegue el neto. Como las averías no traen color, se
+  // reparten entre los colores recolectados proporcionalmente a lo recolectado,
+  // con reparto por mayor-resto para que la suma entera cuadre exacta.
+  const averiaPorColor = repartirProporcional(
+    cantidadesValidas.map((c) => c.cantidad),
+    Math.min(totalAverias, totalRecolectado),
+  )
+
   // A diferencia del flujo anterior, la recolección ya no clasifica en
   // tipo×color: solo registra cuánto entró de cada color, sin
   // clasificar, a la espera del proceso de Clasificación.
-  const inventarioInsert = cantidadesValidas.map((c) => ({
+  const inventarioInsert = cantidadesValidas.map((c, i) => ({
     bodega_id: datos.bodegaId,
     lote_huevo_id: loteHuevoId,
     color_id: c.colorId,
     anaquel_id: datos.anaquelId,
-    cantidad_disponible: c.cantidad,
+    cantidad_disponible: c.cantidad - averiaPorColor[i],
   }))
 
   const { error: errorInventario } = await db.from("inventario_huevo_sin_clasificar").insert(inventarioInsert)
@@ -178,7 +210,12 @@ export async function registrarRecoleccion(
     return { success: false, message: "Error al registrar el inventario: " + errorInventario.message }
   }
 
-  const movimientosInsert = cantidadesValidas.map((c) => ({
+  // Kardex: la entrada_cosecha se registra en BRUTO (así el Historial diario
+  // sigue mostrando el total recolectado real); y si hubo averías se agrega un
+  // movimiento salida_averia negativo por color, de modo que el saldo del
+  // inventario (neto) reconcilie con la suma de sus movimientos.
+  const creadoEn = fechaHoraColombiaISO()
+  const movimientosInsert: Record<string, unknown>[] = cantidadesValidas.map((c) => ({
     bodega_id: datos.bodegaId,
     lote_huevo_id: loteHuevoId,
     color_id: c.colorId,
@@ -186,15 +223,28 @@ export async function registrarRecoleccion(
     tipo_movimiento: "entrada_cosecha",
     cantidad: c.cantidad,
     usuario_id: usuario?.id ?? null,
-    creado_en: fechaHoraColombiaISO(),
+    creado_en: creadoEn,
   }))
+  cantidadesValidas.forEach((c, i) => {
+    if (averiaPorColor[i] > 0) {
+      movimientosInsert.push({
+        bodega_id: datos.bodegaId,
+        lote_huevo_id: loteHuevoId,
+        color_id: c.colorId,
+        anaquel_id: datos.anaquelId,
+        tipo_movimiento: "salida_averia",
+        cantidad: -averiaPorColor[i],
+        usuario_id: usuario?.id ?? null,
+        creado_en: creadoEn,
+      })
+    }
+  })
 
   const { error: errorMov } = await db.from("movimientos_huevo_sin_clasificar").insert(movimientosInsert)
   if (errorMov) {
     console.error("[avimol] Error insertando movimiento de inventario sin clasificar:", errorMov)
   }
 
-  const averiasValidas = datos.averias.filter((a) => a.cantidad > 0)
   if (averiasValidas.length > 0) {
     const averiasInsert = averiasValidas.map((a) => ({
       lote_huevo_id: loteHuevoId,

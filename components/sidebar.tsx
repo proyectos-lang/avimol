@@ -69,8 +69,6 @@ export function Sidebar() {
           radial-gradient(120% 90% at 82% 0%, color-mix(in srgb, var(--hero,#00c2dc) 34%, transparent), transparent 58%),
           radial-gradient(95% 85% at 0% 100%, rgba(28,86,150,.42), transparent 55%);
           transition: background .5s ease; }
-        .avimol-logo-mark{ width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,#0a3f6e,#00c2dc);
-          display:flex; align-items:center; justify-content:center; color:#fff; box-shadow:0 0 14px rgba(0,194,220,.5); flex-shrink:0; }
         .avimol-sb .bg-sidebar-primary{ box-shadow:0 0 12px rgba(0,194,220,.5); }
       `}</style>
 
@@ -82,11 +80,15 @@ export function Sidebar() {
         style={{ "--hero": heroTint } as CSSProperties}
       >
         {colapsado ? (
-          <LogoMarca size={30} />
+          <span className="flex items-center rounded-lg bg-white px-1.5 py-1 shadow-sm">
+            <LogoMarca height={16} />
+          </span>
         ) : (
-          <span className="flex items-center gap-2.5">
-            <LogoMarca size={30} />
-            <span className="text-lg font-extrabold tracking-tight text-sidebar-foreground">Avimol</span>
+          <span className="flex flex-col items-start gap-1.5">
+            <span className="flex items-center rounded-lg bg-white px-2.5 py-1.5 shadow-sm">
+              <LogoMarca height={30} />
+            </span>
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/70">Avimol</span>
           </span>
         )}
         <Button

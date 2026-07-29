@@ -2,7 +2,6 @@ import {
   Warehouse,
   Bird,
   Egg,
-  ClipboardList,
   Building2,
   Truck,
   PackageMinus,
@@ -61,7 +60,6 @@ export const groups: GrupoNav[] = [
     modules: [
       { label: "Recolección", href: "/recoleccion", icon: Egg },
       { label: "Clasificación", href: "/clasificacion", icon: Layers },
-      { label: "Lotes de huevo", href: "/lotes-huevo", icon: ClipboardList },
       { label: "Historial diario", href: "/recoleccion/historial", icon: CalendarDays },
       { label: "Averías", href: "/recoleccion/averias", icon: AlertTriangle },
       { label: "Indicadores", href: "/recoleccion/indicadores", icon: BarChart3 },

@@ -31,6 +31,7 @@ const TIPO_MOVIMIENTO_LABEL: Record<string, string> = {
   salida_cargue_despacho: "Salida por despacho",
   salida_venta_directa: "Salida por venta directa",
   averia: "Avería",
+  salida_averia: "Salida por avería",
   ajuste: "Ajuste",
 }
 

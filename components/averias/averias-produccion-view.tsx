@@ -127,7 +127,11 @@ export function AveriasProduccionView() {
         titulo="Averías de producción"
         subtitulo="Picados, rotos sin recuperar y rotos con yema de recolección y clasificación, por galpón — las de despacho/recepción se manejan en Bodegas y logística → Averías"
       >
-        <StatChip icono={AlertTriangle} label="Averías" valor={averias.length} />
+        <StatChip
+          icono={AlertTriangle}
+          label="Huevos averiados"
+          valor={averias.reduce((s, a) => s + a.cantidad, 0)}
+        />
         <StatChip icono={Droplet} label="Pendientes de procesar yema" valor={seleccionables.length} />
       </PageHeader>
 
